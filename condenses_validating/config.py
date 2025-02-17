@@ -29,26 +29,40 @@ class MongoConfig(BaseModel):
         return f"mongodb://{self.host}:{self.port}"
 
 
-class RateLimiterConfig(BaseModel):
-    limit: int = 512
-    interval: int = 60
-
-
-class MinerManagerConfig(BaseModel):
-    score_ema: float = 0.95
-
-
 class ServerConfig(BaseModel):
     port: int = 9101
     host: str = "0.0.0.0"
 
 
+class OrchestratorConfig(BaseModel):
+    base_url: str = "http://localhost:9101"
+
+
+class ValidatingConfig(BaseModel):
+    batch_size: int = 10
+    concurrent_forward: int = 2
+    forward_sleep: float = 4
+    max_compress_rate: float = 0.8
+
+
+class WalletConfig(BaseModel):
+    path: str = "~/.bittensor/wallets"
+    name: str = "default"
+    hotkey: str = "default"
+
+
+class ScoringConfig(BaseModel):
+    base_url: str = "http://localhost:9102"
+
+
 class Settings(BaseSettings):
     redis: RedisConfig = RedisConfig()
     mongo: MongoConfig = MongoConfig()
-    rate_limiter: RateLimiterConfig = RateLimiterConfig()
-    miner_manager: MinerManagerConfig = MinerManagerConfig()
     server: ServerConfig = ServerConfig()
+    validating: ValidatingConfig = ValidatingConfig()
+    wallet: WalletConfig = WalletConfig()
+    scoring: ScoringConfig = ScoringConfig()
+    orchestrator: OrchestratorConfig = OrchestratorConfig()
 
     class Config:
         env_nested_delimiter = "__"

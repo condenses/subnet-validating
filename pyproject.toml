@@ -1,14 +1,18 @@
 [tool.hatch.build.targets.wheel]
-packages = ["condenses_node_managing"]
+packages = ["condenses_validating"]
+
+[tool.uv.sources]
+subnet-node-managing = { git = "https://github.com/condenses/subnet-node-managing.git" }
+text-compress-scoring = { git = "https://github.com/condenses/text-compress-scoring.git" }
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "subnet-node-managing"
+name = "subnet-validating"
 version = "0.1.0"
-description = "Managing & Counting Subnet Nodes (Miners)"
+description = "Subnet Validator"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -16,13 +20,16 @@ authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
 dependencies = [
-    "fastapi>=0.115.8",
+    "bittensor==9.0.0",
+    "fastapi",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
-    "numpy>=2.2.3",
     "pydantic-settings>=2.7.1",
     "pymongo>=4.11.1",
     "redis>=5.2.1",
+    "subnet-node-managing",
+    "text-compress-scoring",
+    "tiktoken>=0.9.0",
     "uvicorn>=0.34.0",
 ]
 
