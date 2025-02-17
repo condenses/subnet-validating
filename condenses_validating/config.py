@@ -34,8 +34,20 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
 
 
+class RestfulBittensorConfig(BaseModel):
+    base_url: str = "http://localhost:9100"
+
+
 class OrchestratorConfig(BaseModel):
     base_url: str = "http://localhost:9101"
+
+
+class ScoringConfig(BaseModel):
+    base_url: str = "http://localhost:9102"
+
+
+class SynthesizingConfig(BaseModel):
+    base_url: str = "http://localhost:9103"
 
 
 class ValidatingConfig(BaseModel):
@@ -43,16 +55,13 @@ class ValidatingConfig(BaseModel):
     concurrent_forward: int = 2
     forward_sleep: float = 4
     max_compress_rate: float = 0.8
+    synthetic_rate_limit: float = 0.5
 
 
 class WalletConfig(BaseModel):
     path: str = "~/.bittensor/wallets"
     name: str = "default"
     hotkey: str = "default"
-
-
-class ScoringConfig(BaseModel):
-    base_url: str = "http://localhost:9102"
 
 
 class Settings(BaseSettings):
@@ -63,6 +72,8 @@ class Settings(BaseSettings):
     wallet: WalletConfig = WalletConfig()
     scoring: ScoringConfig = ScoringConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
+    restful: RestfulBittensorConfig = RestfulBittensorConfig()
+    synthesizing: SynthesizingConfig = SynthesizingConfig()
 
     class Config:
         env_nested_delimiter = "__"
