@@ -118,7 +118,7 @@ class ValidatorCore:
             acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
             timeout=12,
         )
-        logger.info(f"Consumed rate limits for {len(uids)} UIDs")
+        logger.info(f"Consumed rate limits for UIDs: {uids}")
 
         if not uids:
             logger.warning("No UIDs to forward to")
