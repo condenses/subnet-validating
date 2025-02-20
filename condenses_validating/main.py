@@ -167,7 +167,6 @@ class ValidatorCore:
             ]
             await asyncio.gather(*futures)
             log.add_log(forward_uuid, "✓ Forward complete")
-            asyncio.create_task(log.remove_log(forward_uuid, duration=5))
 
     async def run(self) -> None:
         """Main validator loop"""
