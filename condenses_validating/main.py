@@ -116,6 +116,7 @@ class ValidatorCore:
             top_fraction=1.0,
             count=CONFIG.validating.batch_size,
             acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
+            timeout=12,
         )
         logger.info(f"Consumed rate limits for {len(uids)} UIDs")
 
