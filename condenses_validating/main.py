@@ -66,7 +66,9 @@ class ScoringManager:
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
-        logger.info(f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}")
+        logger.info(
+            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}"
+        )
         return final_uids, final_scores
 
 
@@ -95,7 +97,8 @@ class ValidatorCore:
 
     async def get_synthetic(self) -> TextCompresssProtocol:
         logger.debug("Requesting synthetic message")
-        user_message = await self.synthesizing.get_message().user_message
+        synth_response = await self.synthesizing.get_message()
+        user_message = synth_response.user_message
         logger.debug(f"Received synthetic message: {user_message[:50]}...")
         return TextCompresssProtocol(user_message=user_message)
 
@@ -115,10 +118,10 @@ class ValidatorCore:
             acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
         )
         logger.info(f"Consumed rate limits for {len(uids)} UIDs")
-        
+
         synthetic_synapse = await self.get_synthetic()
         axons = await self.get_axons(uids)
-        
+
         logger.info("Forwarding to miners")
         responses = await self.dendrite.forward(
             axons=axons,
@@ -126,7 +129,7 @@ class ValidatorCore:
             timeout=12,
         )
         logger.info(f"Received {len(responses)} responses")
-        
+
         uids, scores = await self.scoring_manager.get_scores(
             responses=responses,
             synthetic_synapse=synthetic_synapse,
