@@ -65,10 +65,8 @@ class ScoringManager:
             )
             logger.debug(f"[{synthetic_synapse.id}] Received scores: {valid_scores}")
             valid_scores = [
-                score * 0.8 + (1 - compress_rate) * 0.2
-                for score, compress_rate in zip(
-                    valid_scores, valid_responses.compress_rate
-                )
+                score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
+                for score, valid_responses in zip(valid_scores, valid_responses)
             ]
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
             logger.info(f"[{synthetic_synapse.id}] Updated scoring records in Redis")
