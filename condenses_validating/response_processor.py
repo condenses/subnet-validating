@@ -1,4 +1,4 @@
-from .protocol import TextCompresssProtocol
+from .protocol import TextCompressProtocol
 from typing import List, Tuple
 from loguru import logger
 
@@ -8,10 +8,10 @@ class ResponseProcessor:
 
     @staticmethod
     def validate_responses(
-        uids: List[int], responses: List[TextCompresssProtocol]
+        uids: List[int], responses: List[TextCompressProtocol]
     ) -> Tuple[
-        List[Tuple[int, TextCompresssProtocol]],
-        List[Tuple[int, TextCompresssProtocol, str]],
+        List[Tuple[int, TextCompressProtocol]],
+        List[Tuple[int, TextCompressProtocol, str]],
     ]:
         valid = []
         invalid = []
