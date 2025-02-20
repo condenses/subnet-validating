@@ -7,14 +7,14 @@ from .config import CONFIG
 TOKENIZER = tiktoken.encoding_for_model("gpt-4o")
 
 
-class TextCompresssProtocol(bt.Synapse):
+class TextCompressProtocol(bt.Synapse):
     context: str = ""
     compressed_context: str = ""
     user_message: str = ""
 
     @property
-    def forward_synapse(self) -> "TextCompresssProtocol":
-        return TextCompresssProtocol(
+    def forward_synapse(self) -> "TextCompressProtocol":
+        return TextCompressProtocol(
             context=self.user_message,
         )
 

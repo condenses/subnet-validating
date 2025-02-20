@@ -4,7 +4,7 @@ from text_compress_scoring.client import AsyncScoringClient
 from restful_bittensor.client import AsyncRestfulBittensor
 from condenses_synthesizing.client import AsyncSynthesizingClient
 from condenses_validating.config import CONFIG
-from .protocol import TextCompresssProtocol
+from .protocol import TextCompressProtocol
 import asyncio
 from loguru import logger
 from redis.asyncio import Redis
@@ -22,8 +22,8 @@ class ScoringManager:
 
     async def get_scores(
         self,
-        responses: list[TextCompresssProtocol],
-        synthetic_synapse: TextCompresssProtocol,
+        responses: list[TextCompressProtocol],
+        synthetic_synapse: TextCompressProtocol,
         uids: list[int],
     ) -> tuple[list[int], list[float]]:
         logger.info(f"Processing responses from {len(uids)} UIDs")
@@ -95,12 +95,12 @@ class ValidatorCore:
         self.should_exit = False
         logger.success("ValidatorCore initialization complete")
 
-    async def get_synthetic(self) -> TextCompresssProtocol:
+    async def get_synthetic(self) -> TextCompressProtocol:
         logger.debug("Requesting synthetic message")
         synth_response = await self.synthesizing.get_message()
         user_message = synth_response.user_message
         logger.debug(f"Received synthetic message: {user_message[:50]}...")
-        return TextCompresssProtocol(user_message=user_message)
+        return TextCompressProtocol(user_message=user_message)
 
     async def get_axons(self, uids: list[int]) -> list[bt.AxonInfo]:
         logger.debug(f"Fetching axon info for {len(uids)} UIDs")
@@ -128,7 +128,7 @@ class ValidatorCore:
         axons = await self.get_axons(uids)
 
         logger.info("Forwarding to miners")
-        forward_synapse = TextCompresssProtocol(context=synthetic_synapse.user_message)
+        forward_synapse = TextCompressProtocol(context=synthetic_synapse.user_message)
         logger.debug(f"Forwarding synapse: {forward_synapse}")
         responses = await self.dendrite.forward(
             axons=axons,
