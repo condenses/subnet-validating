@@ -31,7 +31,7 @@ class ScoringManager:
         forward_uuid: str,
     ) -> tuple[list[int], list[float]]:
         log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
-        valid, invalid = self.response_processor.validate_responses(
+        valid, invalid = await self.response_processor.validate_responses(
             uids, responses, synthetic_synapse, forward_uuid, log
         )
 
