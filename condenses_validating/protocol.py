@@ -9,12 +9,12 @@ TOKENIZER = tiktoken.encoding_for_model("gpt-4o")
 
 class TextCompresssProtocol(bt.Synapse):
     context: str = Field(
-        description="The context of the message", frozen=True, default=""
+        description="The context of the message", default=""
     )
     compressed_context: str = Field(
-        description="The compressed context of the message", frozen=False, default=""
+        description="The compressed context of the message", default=""
     )
-    user_message: str = Field(description="The user message", frozen=True, default="")
+    user_message: str = Field(description="The user message", default="")
 
     @property
     def forward_synapse(self) -> "TextCompresssProtocol":

@@ -128,11 +128,14 @@ class ValidatorCore:
         axons = await self.get_axons(uids)
 
         logger.info("Forwarding to miners")
+        forward_synapse = TextCompresssProtocol(context=synthetic_synapse.user_message)
+        logger.debug(f"Forwarding synapse: {forward_synapse}")
         responses = await self.dendrite.forward(
             axons=axons,
-            synapse=synthetic_synapse.forward_synapse,
+            synapse=forward_synapse,
             timeout=12,
         )
+        logger.debug(responses)
         logger.info(f"Received {len(responses)} responses")
 
         uids, scores = await self.scoring_manager.get_scores(
