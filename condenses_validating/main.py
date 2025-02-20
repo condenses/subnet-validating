@@ -12,6 +12,56 @@ import traceback
 from .redis_manager import RedisManager
 from .response_processor import ResponseProcessor
 import tiktoken
+from rich.console import Console
+from rich.columns import Columns
+from rich.panel import Panel
+from rich.live import Live
+from collections import deque
+import time
+import uuid
+
+
+class ForwardLog:
+    def __init__(self, max_columns=4):
+        self.console = Console()
+        self.columns_data = deque(maxlen=max_columns)
+        self.live = Live(console=self.console, refresh_per_second=4)
+
+    def add_log(self, synapse_id: str, message: str):
+        # Find existing column for this synapse_id or create new
+        column_found = False
+        for column in self.columns_data:
+            if column["id"] == synapse_id:
+                column["logs"].append(message)
+                column_found = True
+                break
+
+        if not column_found:
+            self.columns_data.append(
+                {"id": synapse_id, "logs": [message], "start_time": time.time()}
+            )
+        self.live.update(self.render())
+
+    def render(self):
+        panels = []
+        for column in self.columns_data:
+            elapsed = time.time() - column["start_time"]
+            content = "\n".join(column["logs"])
+            panels.append(
+                Panel(
+                    content,
+                    title=f"[bold blue]Forward {column['id']}[/] ({elapsed:.1f}s)",
+                    width=40,
+                )
+            )
+        return Columns(panels)
+
+    def __enter__(self):
+        self.live.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.live.stop()
 
 
 class ScoringManager:
@@ -26,10 +76,10 @@ class ScoringManager:
         responses: list[TextCompressProtocol],
         synthetic_synapse: TextCompressProtocol,
         uids: list[int],
+        log: ForwardLog,
+        forward_uuid: str,
     ) -> tuple[list[int], list[float]]:
-        logger.info(
-            f"[{synthetic_synapse.id}] Processing responses from {len(uids)} UIDs"
-        )
+        log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
         valid, invalid = self.response_processor.validate_responses(
             uids, responses, synthetic_synapse
         )
@@ -40,10 +90,10 @@ class ScoringManager:
         valid_responses = [response for _, response in valid]
 
         if not valid_uids:
-            logger.warning("No valid responses received")
+            log.add_log(forward_uuid, "Warning: No valid responses received")
             return invalid_uids, invalid_scores
 
-        logger.info(f"[{synthetic_synapse.id}] Validating {len(valid_uids)} UIDs")
+        log.add_log(forward_uuid, f"Validating {len(valid_uids)} UIDs")
         scored_counter = await self.redis_manager.get_scored_counter()
         valid_uids_to_score = [
             uid
@@ -53,9 +103,7 @@ class ScoringManager:
         ]
 
         if valid_uids_to_score:
-            logger.info(
-                f"[{synthetic_synapse.id}] Scoring {len(valid_uids_to_score)} UIDs"
-            )
+            log.add_log(forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs")
             original_user_message = synthetic_synapse.user_message
             valid_scores = await self.scoring_client.score_batch(
                 original_user_message=original_user_message,
@@ -63,22 +111,23 @@ class ScoringManager:
                     response.compressed_context for response in valid_responses
                 ],
             )
-            logger.debug(f"[{synthetic_synapse.id}] Received scores: {valid_scores}")
+            log.add_log(forward_uuid, f"Received scores: {valid_scores}")
             valid_scores = [
                 score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
                 for score, valid_responses in zip(valid_scores, valid_responses)
             ]
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            logger.info(f"[{synthetic_synapse.id}] Updated scoring records in Redis")
+            log.add_log(forward_uuid, "Updated scoring records in Redis")
         else:
-            logger.warning(f"[{synthetic_synapse.id}] No UIDs eligible for scoring")
+            log.add_log(forward_uuid, "Warning: No UIDs eligible for scoring")
             valid_uids = []
             valid_scores = []
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
-        logger.info(
-            f"[{synthetic_synapse.id}] Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}"
+        log.add_log(
+            forward_uuid,
+            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
         )
         return final_uids, final_scores
 
@@ -95,6 +144,7 @@ class ValidatorCore:
         self.restful_bittensor = AsyncRestfulBittensor(CONFIG.restful.base_url)
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
+        self.forward_log = ForwardLog()
 
         self.wallet = bt.wallet(
             path=CONFIG.wallet.path,
@@ -107,61 +157,58 @@ class ValidatorCore:
         logger.success("ValidatorCore initialization complete")
 
     async def get_synthetic(self) -> TextCompressProtocol:
-        logger.debug("Requesting synthetic message")
         synth_response = await self.synthesizing.get_message()
         user_message = synth_response.user_message
-        logger.debug(f"Received synthetic message: {user_message[:50]}...")
         return TextCompressProtocol(user_message=user_message)
 
     async def get_axons(self, uids: list[int]) -> list[bt.AxonInfo]:
-        logger.debug(f"Fetching axon info for {len(uids)} UIDs")
         string_axons = await self.restful_bittensor.get_axons(uids=uids)
         axons = [bt.AxonInfo.from_string(axon) for axon in string_axons]
-        logger.debug(f"Retrieved {len(axons)} axons")
         return axons
 
     async def forward(self):
-        logger.info("Starting forward pass")
-        uids = await self.orchestrator.consume_rate_limits(
-            uid=None,
-            top_fraction=1.0,
-            count=CONFIG.validating.batch_size,
-            acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
-            timeout=12,
-        )
-        logger.info(f"Consumed rate limits for UIDs: {uids}")
+        forward_uuid = str(uuid.uuid4())
+        with self.forward_log as log:
+            log.add_log(forward_uuid, "Starting forward pass")
+            uids = await self.orchestrator.consume_rate_limits(
+                uid=None,
+                top_fraction=1.0,
+                count=CONFIG.validating.batch_size,
+                acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
+                timeout=12,
+            )
 
-        if not uids:
-            logger.warning("No UIDs to forward to")
-            return
+            synthetic_synapse = await self.get_synthetic()
+            log.add_log(forward_uuid, f"Processing {len(uids)} UIDs")
 
-        synthetic_synapse = await self.get_synthetic()
-        logger.info(f"[{synthetic_synapse.id}] Processing synthetic message")
-        axons = await self.get_axons(uids)
+            axons = await self.get_axons(uids)
+            log.add_log(forward_uuid, f"Got {len(axons)} axons")
 
-        logger.info(f"[{synthetic_synapse.id}] Forwarding to miners")
-        forward_synapse = TextCompressProtocol(context=synthetic_synapse.user_message)
-        responses = await self.dendrite.forward(
-            axons=axons,
-            synapse=forward_synapse,
-            timeout=12,
-        )
-        logger.info(f"[{synthetic_synapse.id}] Received {len(responses)} responses")
+            forward_synapse = TextCompressProtocol(
+                context=synthetic_synapse.user_message
+            )
+            responses = await self.dendrite.forward(
+                axons=axons,
+                synapse=forward_synapse,
+                timeout=12,
+            )
+            log.add_log(forward_uuid, f"Received {len(responses)} responses")
 
-        uids, scores = await self.scoring_manager.get_scores(
-            responses=responses,
-            synthetic_synapse=synthetic_synapse,
-            uids=uids,
-        )
-        logger.info(f"[{synthetic_synapse.id}] UIDs: {uids}; Scores: {scores}")
+            uids, scores = await self.scoring_manager.get_scores(
+                responses=responses,
+                synthetic_synapse=synthetic_synapse,
+                uids=uids,
+                log=log,
+                forward_uuid=forward_uuid,
+            )
+            log.add_log(forward_uuid, f"Scored {len(scores)} responses")
 
-        logger.info(f"[{synthetic_synapse.id}] Updating stats")
-        futures = [
-            self.orchestrator.update_stats(uid=uid, new_score=score)
-            for uid, score in zip(uids, scores)
-        ]
-        await asyncio.gather(*futures)
-        logger.success(f"[{synthetic_synapse.id}] Forward pass completed")
+            futures = [
+                self.orchestrator.update_stats(uid=uid, new_score=score)
+                for uid, score in zip(uids, scores)
+            ]
+            await asyncio.gather(*futures)
+            log.add_log(forward_uuid, "✓ Forward complete")
 
     async def run(self) -> None:
         """Main validator loop"""
