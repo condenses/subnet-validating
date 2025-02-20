@@ -50,12 +50,19 @@ class SynthesizingConfig(BaseModel):
     base_url: str = "http://localhost:9103"
 
 
+class ScoringRateConfig(BaseModel):
+    interval: int = 600
+    max_scoring_count: int = 4
+    redis_key: str = "scored_uid"
+
+
 class ValidatingConfig(BaseModel):
     batch_size: int = 10
     concurrent_forward: int = 2
     forward_sleep: float = 4
     max_compress_rate: float = 0.8
     synthetic_rate_limit: float = 0.5
+    scoring_rate: ScoringRateConfig = ScoringRateConfig()
 
 
 class WalletConfig(BaseModel):

@@ -5,6 +5,7 @@ packages = ["condenses_validating"]
 subnet-node-managing = { git = "https://github.com/condenses/subnet-node-managing.git" }
 text-compress-scoring = { git = "https://github.com/condenses/text-compress-scoring.git" }
 restful-bittensor = { git = "https://github.com/condenses/restful-bittensor.git" }
+subnet-synthesizing = { git = "https://github.com/condenses/subnet-synthesizing" }
 
 [build-system]
 requires = ["hatchling"]
@@ -30,6 +31,7 @@ dependencies = [
     "redis>=5.2.1",
     "restful-bittensor",
     "subnet-node-managing",
+    "subnet-synthesizing",
     "text-compress-scoring",
     "tiktoken>=0.9.0",
     "uvicorn>=0.34.0",
