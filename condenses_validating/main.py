@@ -61,6 +61,7 @@ class ScoringManager:
                 batch_compressed_user_messages=[
                     response.compressed_context for response in valid_responses
                 ],
+                timeout=360,
             )
             log.add_log(forward_uuid, f"Received scores: {valid_scores}")
             valid_scores = [
@@ -128,8 +129,11 @@ class ValidatorCore:
                 acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
                 timeout=12,
             )
-
-            synthetic_synapse = await self.get_synthetic()
+            try:
+                synthetic_synapse = await self.get_synthetic()
+            except Exception as e:
+                log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
+                return
             log.add_log(forward_uuid, f"Processing UIDs: {uids}")
 
             axons = await self.get_axons(uids)
@@ -144,14 +148,17 @@ class ValidatorCore:
                 timeout=12,
             )
             log.add_log(forward_uuid, f"Received {len(responses)} responses")
-
-            uids, scores = await self.scoring_manager.get_scores(
-                responses=responses,
-                synthetic_synapse=synthetic_synapse,
-                uids=uids,
-                log=log,
-                forward_uuid=forward_uuid,
-            )
+            try:
+                uids, scores = await self.scoring_manager.get_scores(
+                    responses=responses,
+                    synthetic_synapse=synthetic_synapse,
+                    uids=uids,
+                    log=log,
+                    forward_uuid=forward_uuid,
+                )
+            except Exception as e:
+                log.add_log(forward_uuid, f"Error in scoring: {e}")
+                return
             log.add_log(forward_uuid, f"Scored {len(scores)} responses")
 
             futures = [
