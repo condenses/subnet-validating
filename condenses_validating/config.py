@@ -84,6 +84,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_nested_delimiter = "__"
+        env_file = ".env"
 
 
 CONFIG = Settings()
