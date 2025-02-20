@@ -1,14 +1,19 @@
 from .protocol import TextCompressProtocol
 from typing import List, Tuple
 from loguru import logger
+import tiktoken
 
 
 class ResponseProcessor:
     """Handles processing and validation of miner responses"""
 
-    @staticmethod
+    encoding = tiktoken.encoding_for_model("gpt-4o")
+
     def validate_responses(
-        uids: List[int], responses: List[TextCompressProtocol]
+        self,
+        uids: List[int],
+        responses: List[TextCompressProtocol],
+        ground_truth_synapse: TextCompressProtocol,
     ) -> Tuple[
         List[Tuple[int, TextCompressProtocol]],
         List[Tuple[int, TextCompressProtocol, str]],
@@ -19,8 +24,15 @@ class ResponseProcessor:
         for uid, response in zip(uids, responses):
             if response and response.is_success and response.verify():
                 valid.append((uid, response))
+                original_tokens = self.encoding.encode(
+                    ground_truth_synapse.user_message
+                )
+                compressed_tokens = self.encoding.encode(
+                    response.compressed_context
+                )
+                compress_rate = len(compressed_tokens) / len(original_tokens)
                 logger.info(
-                    f"Valid response - {uid} - {response.dendrite.process_time}s"
+                    f"Valid response - {uid} - {response.dendrite.process_time}s - Compress rate: {compress_rate}"
                 )
             else:
                 invalid_reason = ""

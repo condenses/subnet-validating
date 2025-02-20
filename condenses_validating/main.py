@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 import traceback
 from .redis_manager import RedisManager
 from .response_processor import ResponseProcessor
+import tiktoken
 
 
 class ScoringManager:
@@ -26,8 +27,12 @@ class ScoringManager:
         synthetic_synapse: TextCompressProtocol,
         uids: list[int],
     ) -> tuple[list[int], list[float]]:
-        logger.info(f"Processing responses from {len(uids)} UIDs")
-        valid, invalid = self.response_processor.validate_responses(uids, responses)
+        logger.info(
+            f"[{synthetic_synapse.id}] Processing responses from {len(uids)} UIDs"
+        )
+        valid, invalid = self.response_processor.validate_responses(
+            uids, responses, synthetic_synapse
+        )
 
         invalid_uids = [uid for uid, _, _ in invalid]
         invalid_scores = [0] * len(invalid)
@@ -38,7 +43,7 @@ class ScoringManager:
             logger.warning("No valid responses received")
             return invalid_uids, invalid_scores
 
-        logger.info(f"Validating {len(valid_uids)} UIDs")
+        logger.info(f"[{synthetic_synapse.id}] Validating {len(valid_uids)} UIDs")
         scored_counter = await self.redis_manager.get_scored_counter()
         valid_uids_to_score = [
             uid
@@ -48,7 +53,9 @@ class ScoringManager:
         ]
 
         if valid_uids_to_score:
-            logger.info(f"Scoring {len(valid_uids_to_score)} UIDs")
+            logger.info(
+                f"[{synthetic_synapse.id}] Scoring {len(valid_uids_to_score)} UIDs"
+            )
             original_user_message = synthetic_synapse.user_message
             valid_scores = await self.scoring_client.score_batch(
                 original_user_message=original_user_message,
@@ -56,18 +63,24 @@ class ScoringManager:
                     response.compressed_context for response in valid_responses
                 ],
             )
-            logger.debug(f"Received scores: {valid_scores}")
+            logger.debug(f"[{synthetic_synapse.id}] Received scores: {valid_scores}")
+            valid_scores = [
+                score * 0.8 + (1 - compress_rate) * 0.2
+                for score, compress_rate in zip(
+                    valid_scores, valid_responses.compress_rate
+                )
+            ]
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            logger.info("Updated scoring records in Redis")
+            logger.info(f"[{synthetic_synapse.id}] Updated scoring records in Redis")
         else:
-            logger.warning("No UIDs eligible for scoring")
+            logger.warning(f"[{synthetic_synapse.id}] No UIDs eligible for scoring")
             valid_uids = []
             valid_scores = []
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
         logger.info(
-            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}"
+            f"[{synthetic_synapse.id}] Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}"
         )
         return final_uids, final_scores
 
@@ -125,32 +138,34 @@ class ValidatorCore:
             return
 
         synthetic_synapse = await self.get_synthetic()
+        logger.info(f"[{synthetic_synapse.id}] Processing synthetic message")
         axons = await self.get_axons(uids)
 
-        logger.info("Forwarding to miners")
+        logger.info(f"[{synthetic_synapse.id}] Forwarding to miners")
         forward_synapse = TextCompressProtocol(context=synthetic_synapse.user_message)
-        logger.debug(f"Forwarding synapse: {forward_synapse}")
+        logger.debug(f"[{synthetic_synapse.id}] Forwarding synapse: {forward_synapse}")
         responses = await self.dendrite.forward(
             axons=axons,
             synapse=forward_synapse,
             timeout=12,
         )
-        logger.debug(responses)
-        logger.info(f"Received {len(responses)} responses")
+        logger.debug(f"[{synthetic_synapse.id}] {responses}")
+        logger.info(f"[{synthetic_synapse.id}] Received {len(responses)} responses")
 
         uids, scores = await self.scoring_manager.get_scores(
             responses=responses,
             synthetic_synapse=synthetic_synapse,
             uids=uids,
         )
+        logger.info(f"[{synthetic_synapse.id}] UIDs: {uids}; Scores: {scores}")
 
-        logger.info("Updating stats")
+        logger.info(f"[{synthetic_synapse.id}] Updating stats")
         futures = [
             self.orchestrator.update_stats(uid=uid, new_score=score)
             for uid, score in zip(uids, scores)
         ]
         await asyncio.gather(*futures)
-        logger.success("Forward pass completed")
+        logger.success(f"[{synthetic_synapse.id}] Forward pass completed")
 
     async def run(self) -> None:
         """Main validator loop"""
