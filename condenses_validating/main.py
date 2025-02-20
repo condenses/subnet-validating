@@ -158,7 +158,7 @@ class ValidatorCore:
         while not self.should_exit:
             try:
                 await self.forward()
-                asyncio.sleep(8)
+                await asyncio.sleep(8)
             except Exception as e:
                 logger.error(f"Forward error: {e}")
                 traceback.print_exc()
