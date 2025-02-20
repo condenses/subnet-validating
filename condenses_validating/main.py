@@ -32,7 +32,7 @@ class ScoringManager:
     ) -> tuple[list[int], list[float]]:
         log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
         valid, invalid = await self.response_processor.validate_responses(
-            uids, responses, synthetic_synapse, forward_uuid, log
+            uids, responses, synthetic_synapse
         )
 
         invalid_uids = [uid for uid, _, _ in invalid]
@@ -170,7 +170,10 @@ class ValidatorCore:
 
         while not self.should_exit:
             try:
-                await self.forward()
+                concurrent_forwards = [
+                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
+                ]
+                await asyncio.gather(*concurrent_forwards)
                 await asyncio.sleep(8)
             except Exception as e:
                 logger.error(f"Forward error: {e}")

@@ -30,9 +30,9 @@ class ForwardLog:
 
     async def remove_log(self, forward_uuid: str, duration: float = 5):
         await asyncio.sleep(duration)
-        for column in self.columns_data:
+        for i, column in enumerate(self.columns_data):
             if column["id"] == forward_uuid:
-                column["logs"].pop()
+                self.columns_data.remove(column)
                 break
 
     def render(self):
