@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     wallet: WalletConfig = WalletConfig()
     scoring: ScoringConfig = ScoringConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
-    restful: RestfulBittensorConfig = RestfulBittensorConfig()
+    restful_bittensor: RestfulBittensorConfig = RestfulBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
 
     class Config:
