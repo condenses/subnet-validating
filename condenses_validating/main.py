@@ -95,7 +95,7 @@ class ValidatorCore:
         self.restful_bittensor = AsyncRestfulBittensor(CONFIG.restful.base_url)
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.forward_log = ForwardLog(redis=self.redis_client)
+        self.forward_log = ForwardLog()
 
         self.wallet = bt.wallet(
             path=CONFIG.wallet.path,
