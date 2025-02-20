@@ -18,6 +18,7 @@ class ScoringManager:
         self.scoring_client = scoring_client
         self.redis_manager = redis_manager
         self.response_processor = ResponseProcessor()
+        logger.info("ScoringManager initialized")
 
     async def get_scores(
         self,
@@ -25,6 +26,7 @@ class ScoringManager:
         synthetic_synapse: TextCompresssProtocol,
         uids: list[int],
     ) -> tuple[list[int], list[float]]:
+        logger.info(f"Processing responses from {len(uids)} UIDs")
         valid, invalid = self.response_processor.validate_responses(uids, responses)
 
         invalid_uids = [uid for uid, _, _ in invalid]
@@ -33,6 +35,7 @@ class ScoringManager:
         valid_responses = [response for _, response in valid]
 
         if not valid_uids:
+            logger.warning("No valid responses received")
             return invalid_uids, invalid_scores
 
         logger.info(f"Validating {len(valid_uids)} UIDs")
@@ -53,18 +56,23 @@ class ScoringManager:
                     response.compressed_context for response in valid_responses
                 ],
             )
+            logger.debug(f"Received scores: {valid_scores}")
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
+            logger.info("Updated scoring records in Redis")
         else:
+            logger.warning("No UIDs eligible for scoring")
             valid_uids = []
             valid_scores = []
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
+        logger.info(f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}")
         return final_uids, final_scores
 
 
 class ValidatorCore:
     def __init__(self):
+        logger.info("Initializing ValidatorCore")
         self.redis_client = Redis(
             host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
         )
@@ -80,47 +88,64 @@ class ValidatorCore:
             name=CONFIG.wallet.name,
             hotkey=CONFIG.wallet.hotkey,
         )
+        logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
+        logger.success("ValidatorCore initialization complete")
 
     async def get_synthetic(self) -> TextCompresssProtocol:
+        logger.debug("Requesting synthetic message")
         user_message = await self.synthesizing.get_message()
+        logger.debug(f"Received synthetic message: {user_message[:50]}...")
         return TextCompresssProtocol(user_message=user_message)
 
     async def get_axons(self, uids: list[int]) -> list[bt.AxonInfo]:
+        logger.debug(f"Fetching axon info for {len(uids)} UIDs")
         string_axons = await self.restful_bittensor.get_axons(uids=uids)
-        return [bt.AxonInfo.from_string(axon) for axon in string_axons]
+        axons = [bt.AxonInfo.from_string(axon) for axon in string_axons]
+        logger.debug(f"Retrieved {len(axons)} axons")
+        return axons
 
     async def forward(self):
+        logger.info("Starting forward pass")
         uids = await self.orchestrator.consume_rate_limits(
             uid=None,
             top_fraction=1.0,
             count=CONFIG.validating.batch_size,
             acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
         )
+        logger.info(f"Consumed rate limits for {len(uids)} UIDs")
+        
         synthetic_synapse = await self.get_synthetic()
         axons = await self.get_axons(uids)
+        
+        logger.info("Forwarding to miners")
         responses = await self.dendrite.forward(
             axons=axons,
             synapse=synthetic_synapse.forward_synapse,
             timeout=12,
         )
+        logger.info(f"Received {len(responses)} responses")
+        
         uids, scores = await self.scoring_manager.get_scores(
             responses=responses,
             synthetic_synapse=synthetic_synapse,
             uids=uids,
         )
 
+        logger.info("Updating stats")
         futures = [
             self.orchestrator.update_stats(uid=uid, new_score=score)
             for uid, score in zip(uids, scores)
         ]
         await asyncio.gather(*futures)
+        logger.success("Forward pass completed")
 
     async def run(self) -> None:
         """Main validator loop"""
         logger.info("Starting validator loop.")
         await self.redis_manager.flush_db()
+        logger.info("Redis DB flushed")
 
         while not self.should_exit:
             try:
@@ -133,12 +158,17 @@ class ValidatorCore:
                 exit()
 
     async def loop(self):
+        logger.info("Starting main loop")
         while True:
             forwards = [self.forward() for _ in range(CONFIG.validating.batch_size)]
+            logger.info(f"Processing batch of {len(forwards)} forwards")
             await asyncio.gather(*forwards)
+            logger.info(f"Sleeping for {CONFIG.validating.interval} seconds")
             await asyncio.sleep(CONFIG.validating.interval)
 
 
 def start_loop():
+    logger.info("Initializing validator")
     validator = ValidatorCore()
+    logger.info("Starting validator loop")
     asyncio.run(validator.loop())
