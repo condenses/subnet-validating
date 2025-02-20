@@ -32,7 +32,7 @@ class ScoringManager:
     ) -> tuple[list[int], list[float]]:
         log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
         valid, invalid = self.response_processor.validate_responses(
-            uids, responses, synthetic_synapse, forward_uuid
+            uids, responses, synthetic_synapse, forward_uuid, log
         )
 
         invalid_uids = [uid for uid, _, _ in invalid]

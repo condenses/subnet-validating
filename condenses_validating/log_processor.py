@@ -4,7 +4,7 @@ from rich.panel import Panel
 from rich.live import Live
 from collections import deque
 import time
-import uuid
+import asyncio
 
 
 class ForwardLog:
