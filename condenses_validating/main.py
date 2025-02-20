@@ -95,7 +95,7 @@ class ValidatorCore:
 
     async def get_synthetic(self) -> TextCompresssProtocol:
         logger.debug("Requesting synthetic message")
-        user_message = await self.synthesizing.get_message()
+        user_message = await self.synthesizing.get_message().user_message
         logger.debug(f"Received synthetic message: {user_message[:50]}...")
         return TextCompresssProtocol(user_message=user_message)
 
