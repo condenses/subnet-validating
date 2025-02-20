@@ -2,6 +2,7 @@ from .protocol import TextCompressProtocol
 from typing import List, Tuple
 from loguru import logger
 import tiktoken
+from .log_processor import ForwardLog
 
 
 class ResponseProcessor:
@@ -15,6 +16,7 @@ class ResponseProcessor:
         responses: List[TextCompressProtocol],
         ground_truth_synapse: TextCompressProtocol,
         forward_uuid: str,
+        log: ForwardLog,
     ) -> Tuple[
         List[Tuple[int, TextCompressProtocol]],
         List[Tuple[int, TextCompressProtocol, str]],
@@ -28,12 +30,11 @@ class ResponseProcessor:
                 original_tokens = self.encoding.encode(
                     ground_truth_synapse.user_message
                 )
-                compressed_tokens = self.encoding.encode(
-                    response.compressed_context
-                )
+                compressed_tokens = self.encoding.encode(response.compressed_context)
                 compress_rate = len(compressed_tokens) / len(original_tokens)
-                logger.info(
-                    f"Valid response - {uid} - {response.dendrite.process_time}s - Compress rate: {compress_rate}"
+                log.add_log(
+                    forward_uuid,
+                    f"Valid response - {uid} - {response.dendrite.process_time}s - Compress rate: {compress_rate}",
                 )
             else:
                 invalid_reason = ""
@@ -45,8 +46,9 @@ class ResponseProcessor:
                     invalid_reason = "verification_failed"
 
                 invalid.append((uid, response, invalid_reason))
-                logger.info(
-                    f"Invalid response - {uid} - {response.dendrite.process_time if response else 0}s - Reason: {invalid_reason}"
+                log.add_log(
+                    forward_uuid,
+                    f"Invalid response - {uid} - {response.dendrite.process_time if response else 0}s - Reason: {invalid_reason}",
                 )
 
         return valid, invalid
