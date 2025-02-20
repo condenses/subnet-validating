@@ -87,7 +87,10 @@ class ValidatorCore:
     def __init__(self):
         logger.info("Initializing ValidatorCore")
         self.redis_client = Redis(
-            host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
+            host=CONFIG.redis.host,
+            port=CONFIG.redis.port,
+            db=CONFIG.redis.db,
+            decode_responses=True,
         )
         self.redis_manager = RedisManager(self.redis_client)
         self.orchestrator = AsyncOrchestratorClient(CONFIG.orchestrator.base_url)

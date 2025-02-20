@@ -4,6 +4,7 @@ from redis.asyncio import Redis
 
 class RedisManager:
     def __init__(self, redis_client: Redis):
+        # Decode responses is enabled by default
         self.redis = redis_client
 
     async def flush_db(self):
