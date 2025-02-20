@@ -10,7 +10,7 @@ class ResponseProcessor:
 
     encoding = tiktoken.encoding_for_model("gpt-4o")
 
-    def validate_responses(
+    async def validate_responses(
         self,
         uids: List[int],
         responses: List[TextCompressProtocol],
@@ -32,7 +32,7 @@ class ResponseProcessor:
                 )
                 compressed_tokens = self.encoding.encode(response.compressed_context)
                 compress_rate = len(compressed_tokens) / len(original_tokens)
-                log.add_log(
+                await log.add_log(
                     forward_uuid,
                     f"Valid response - {uid} - {response.dendrite.process_time}s - Compress rate: {compress_rate}",
                 )
@@ -46,7 +46,7 @@ class ResponseProcessor:
                     invalid_reason = "verification_failed"
 
                 invalid.append((uid, response, invalid_reason))
-                log.add_log(
+                await log.add_log(
                     forward_uuid,
                     f"Invalid response - {uid} - {response.dendrite.process_time if response else 0}s - Reason: {invalid_reason}",
                 )
