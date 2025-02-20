@@ -119,6 +119,10 @@ class ValidatorCore:
         )
         logger.info(f"Consumed rate limits for {len(uids)} UIDs")
 
+        if not uids:
+            logger.warning("No UIDs to forward to")
+            return
+
         synthetic_synapse = await self.get_synthetic()
         axons = await self.get_axons(uids)
 
@@ -153,6 +157,7 @@ class ValidatorCore:
         while not self.should_exit:
             try:
                 await self.forward()
+                asyncio.sleep(8)
             except Exception as e:
                 logger.error(f"Forward error: {e}")
                 traceback.print_exc()
@@ -160,18 +165,9 @@ class ValidatorCore:
                 logger.success("Validator killed by keyboard interrupt.")
                 exit()
 
-    async def loop(self):
-        logger.info("Starting main loop")
-        while True:
-            forwards = [self.forward() for _ in range(CONFIG.validating.batch_size)]
-            logger.info(f"Processing batch of {len(forwards)} forwards")
-            await asyncio.gather(*forwards)
-            logger.info(f"Sleeping for {CONFIG.validating.interval} seconds")
-            await asyncio.sleep(CONFIG.validating.interval)
-
 
 def start_loop():
     logger.info("Initializing validator")
     validator = ValidatorCore()
     logger.info("Starting validator loop")
-    asyncio.run(validator.loop())
+    asyncio.run(validator.run())
