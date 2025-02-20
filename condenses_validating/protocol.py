@@ -1,11 +1,15 @@
 import bittensor as bt
-import uuid
+import random
 from pydantic import Field
 from .config import CONFIG
 
 
+def random_uuid(k=4):
+    return "".join(random.choices("0123456789abcdef", k=k))
+
+
 class TextCompressProtocol(bt.Synapse):
-    id: str = Field(default_factory=lambda: str(uuid.uuid1()))
+    id: str = Field(default_factory=lambda: random_uuid())
     context: str = ""
     compressed_context: str = ""
     user_message: str = ""
