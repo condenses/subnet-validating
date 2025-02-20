@@ -30,8 +30,8 @@ class ScoringManager:
         log: ForwardLog,
         forward_uuid: str,
     ) -> tuple[list[int], list[float]]:
-        await log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
-        valid, invalid = await self.response_processor.validate_responses(
+        log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
+        valid, invalid = self.response_processor.validate_responses(
             uids, responses, synthetic_synapse, forward_uuid, log
         )
 
@@ -41,10 +41,10 @@ class ScoringManager:
         valid_responses = [response for _, response in valid]
 
         if not valid_uids:
-            await log.add_log(forward_uuid, "Warning: No valid responses received")
+            log.add_log(forward_uuid, "Warning: No valid responses received")
             return invalid_uids, invalid_scores
 
-        await log.add_log(forward_uuid, f"Validating {len(valid_uids)} UIDs")
+        log.add_log(forward_uuid, f"Validating {len(valid_uids)} UIDs")
         scored_counter = await self.redis_manager.get_scored_counter()
         valid_uids_to_score = [
             uid
@@ -54,7 +54,7 @@ class ScoringManager:
         ]
 
         if valid_uids_to_score:
-            await log.add_log(forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs")
+            log.add_log(forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs")
             original_user_message = synthetic_synapse.user_message
             valid_scores = await self.scoring_client.score_batch(
                 original_user_message=original_user_message,
@@ -62,21 +62,21 @@ class ScoringManager:
                     response.compressed_context for response in valid_responses
                 ],
             )
-            await log.add_log(forward_uuid, f"Received scores: {valid_scores}")
+            log.add_log(forward_uuid, f"Received scores: {valid_scores}")
             valid_scores = [
                 score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
                 for score, valid_responses in zip(valid_scores, valid_responses)
             ]
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            await log.add_log(forward_uuid, "Updated scoring records in Redis")
+            log.add_log(forward_uuid, "Updated scoring records in Redis")
         else:
-            await log.add_log(forward_uuid, "Warning: No UIDs eligible for scoring")
+            log.add_log(forward_uuid, "Warning: No UIDs eligible for scoring")
             valid_uids = []
             valid_scores = []
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
-        await log.add_log(
+        log.add_log(
             forward_uuid,
             f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
         )
@@ -87,10 +87,7 @@ class ValidatorCore:
     def __init__(self):
         logger.info("Initializing ValidatorCore")
         self.redis_client = Redis(
-            host=CONFIG.redis.host,
-            port=CONFIG.redis.port,
-            db=CONFIG.redis.db,
-            decode_responses=True,
+            host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
         )
         self.redis_manager = RedisManager(self.redis_client)
         self.orchestrator = AsyncOrchestratorClient(CONFIG.orchestrator.base_url)
@@ -123,7 +120,7 @@ class ValidatorCore:
     async def forward(self):
         forward_uuid = str(uuid.uuid4())
         with self.forward_log as log:
-            await log.add_log(forward_uuid, "Starting forward pass")
+            log.add_log(forward_uuid, "Starting forward pass")
             uids = await self.orchestrator.consume_rate_limits(
                 uid=None,
                 top_fraction=1.0,
@@ -133,10 +130,10 @@ class ValidatorCore:
             )
 
             synthetic_synapse = await self.get_synthetic()
-            await log.add_log(forward_uuid, f"Processing UIDs: {uids}")
+            log.add_log(forward_uuid, f"Processing UIDs: {uids}")
 
             axons = await self.get_axons(uids)
-            await log.add_log(forward_uuid, f"Got {len(axons)} axons")
+            log.add_log(forward_uuid, f"Got {len(axons)} axons")
 
             forward_synapse = TextCompressProtocol(
                 context=synthetic_synapse.user_message
@@ -146,7 +143,7 @@ class ValidatorCore:
                 synapse=forward_synapse,
                 timeout=12,
             )
-            await log.add_log(forward_uuid, f"Received {len(responses)} responses")
+            log.add_log(forward_uuid, f"Received {len(responses)} responses")
 
             uids, scores = await self.scoring_manager.get_scores(
                 responses=responses,
@@ -155,14 +152,14 @@ class ValidatorCore:
                 log=log,
                 forward_uuid=forward_uuid,
             )
-            await log.add_log(forward_uuid, f"Scored {len(scores)} responses")
+            log.add_log(forward_uuid, f"Scored {len(scores)} responses")
 
             futures = [
                 self.orchestrator.update_stats(uid=uid, new_score=score)
                 for uid, score in zip(uids, scores)
             ]
             await asyncio.gather(*futures)
-            await log.add_log(forward_uuid, "✓ Forward complete")
+            log.add_log(forward_uuid, "✓ Forward complete")
             asyncio.create_task(log.remove_log(forward_uuid, duration=5))
 
     async def run(self) -> None:
