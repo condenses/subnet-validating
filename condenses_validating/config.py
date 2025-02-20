@@ -57,7 +57,7 @@ class ScoringRateConfig(BaseModel):
 
 
 class ValidatingConfig(BaseModel):
-    batch_size: int = 10
+    batch_size: int = 1
     concurrent_forward: int = 2
     forward_sleep: float = 4
     max_compress_rate: float = 0.8
