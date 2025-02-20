@@ -14,6 +14,7 @@ class ResponseProcessor:
         uids: List[int],
         responses: List[TextCompressProtocol],
         ground_truth_synapse: TextCompressProtocol,
+        forward_uuid: str,
     ) -> Tuple[
         List[Tuple[int, TextCompressProtocol]],
         List[Tuple[int, TextCompressProtocol, str]],

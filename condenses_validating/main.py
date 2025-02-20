@@ -42,6 +42,13 @@ class ForwardLog:
             )
         self.live.update(self.render())
 
+    async def remove_log(self, forward_uuid: str, duration: float = 5):
+        await asyncio.sleep(duration)
+        for column in self.columns_data:
+            if column["id"] == forward_uuid:
+                column["logs"].pop()
+                break
+
     def render(self):
         panels = []
         for column in self.columns_data:
@@ -81,7 +88,7 @@ class ScoringManager:
     ) -> tuple[list[int], list[float]]:
         log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
         valid, invalid = self.response_processor.validate_responses(
-            uids, responses, synthetic_synapse
+            uids, responses, synthetic_synapse, forward_uuid
         )
 
         invalid_uids = [uid for uid, _, _ in invalid]
@@ -179,7 +186,7 @@ class ValidatorCore:
             )
 
             synthetic_synapse = await self.get_synthetic()
-            log.add_log(forward_uuid, f"Processing {len(uids)} UIDs")
+            log.add_log(forward_uuid, f"Processing UIDs: {uids}")
 
             axons = await self.get_axons(uids)
             log.add_log(forward_uuid, f"Got {len(axons)} axons")
@@ -209,6 +216,7 @@ class ValidatorCore:
             ]
             await asyncio.gather(*futures)
             log.add_log(forward_uuid, "✓ Forward complete")
+            asyncio.create_task(log.remove_log(forward_uuid, duration=5))
 
     async def run(self) -> None:
         """Main validator loop"""
