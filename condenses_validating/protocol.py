@@ -4,7 +4,7 @@ from pydantic import Field
 from .config import CONFIG
 
 
-TOKENIZER = tiktoken.get_encoding("gpt-4o")
+TOKENIZER = tiktoken.encoding_for_model("gpt-4o")
 
 
 class TextCompresssProtocol(bt.Synapse):
