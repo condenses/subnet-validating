@@ -35,6 +35,7 @@ class LogViewerApp(App):
         )
         self.set_weights_logs = deque(maxlen=6)
         self.regular_logs = deque(maxlen=6)
+        self.forward_completed_logs = deque(maxlen=6)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -47,12 +48,19 @@ class LogViewerApp(App):
                 yield Static("Batch Logs", classes="log-title")
                 self.batch_logs_widget = Static(classes="log-content")
                 yield self.batch_logs_widget
+            with VerticalScroll(
+                id="forward-completed-container", classes="log-container"
+            ):
+                yield Static("Forward Completed Logs", classes="log-title")
+                self.forward_completed_log_widget = Static(classes="log-content")
+                yield self.forward_completed_log_widget
         yield Footer()
 
     async def fetch_logs(self):
         """Retrieve log data from Redis."""
         self.set_weights_logs.clear()
         self.regular_logs.clear()
+        self.forward_completed_logs.clear()
 
         async for key in self.redis.scan_iter("log:*"):
             parts = key.split(":")
@@ -65,7 +73,12 @@ class LogViewerApp(App):
             if "set_weights" in uuid:
                 self.set_weights_logs.append((uuid, logs))
             else:
-                self.regular_logs.append((uuid, logs))
+                for timestamp, message in logs:
+                    if "Forward complete" in message:
+                        self.forward_completed_logs.append((uuid, logs))
+                        break
+                else:
+                    self.regular_logs.append((uuid, logs))
 
         # Sort regular_logs by the latest timestamp in each log entry
         self.regular_logs = deque(
@@ -92,6 +105,9 @@ class LogViewerApp(App):
             await self.fetch_logs()
             self.set_weights_log_widget.update(self.format_logs(self.set_weights_logs))
             self.batch_logs_widget.update(self.format_logs(self.regular_logs))
+            self.forward_completed_log_widget.update(
+                self.format_logs(self.forward_completed_logs)
+            )
             await asyncio.sleep(2)
 
     async def on_mount(self):
