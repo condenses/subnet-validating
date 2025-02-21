@@ -136,7 +136,7 @@ class CardLogViewer:
             return Panel("No active log streams found", style="dim")
 
         return Columns(
-            rendered_cards, equal=True, expand=True, number_of_columns=self.columns
+            rendered_cards, equal=True, expand=True
         )
 
     async def update_display(self, live: Live) -> None:
