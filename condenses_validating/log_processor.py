@@ -13,68 +13,73 @@ class ForwardLog:
         self.console = Console()
         self.redis = redis_client
         self.max_columns = max_columns
-        self.ttl = ttl  # TTL for log entries (5 minutes default)
+        self.ttl = ttl  # Log expiration time (default: 5 minutes)
         self.live = Live(console=self.console, refresh_per_second=4)
-        # Add special key for set_weights
         self.set_weights_key = "forward_log:set_weights"
 
     async def add_log(self, synapse_id: str, message: str):
-        # Get existing logs or create new entry
+        """Adds a log message for a given synapse ID."""
         redis_key = f"forward_log:{synapse_id}"
         log_data = await self.redis.get(redis_key)
 
-        if log_data:
-            column = json.loads(log_data)
-        else:
-            column = {"id": synapse_id, "logs": [], "start_time": time.time()}
+        column = (
+            json.loads(log_data)
+            if log_data
+            else {"id": synapse_id, "logs": [], "start_time": time.time()}
+        )
 
         column["logs"].append(message)
-
-        # Store updated logs with TTL
         await self.redis.set(redis_key, json.dumps(column), ex=self.ttl)
 
-        self.live.update(await self.render())
+        # Update UI only if live display is running
+        if self.live.is_started:
+            self.live.update(await self.render())
 
     async def remove_log(self, forward_uuid: str, duration: float = 5):
+        """Removes a log entry after a delay."""
         await asyncio.sleep(duration)
         await self.redis.delete(f"forward_log:{forward_uuid}")
 
     async def render(self):
+        """Generates the Rich UI representation of the logs."""
         panels = []
-        # Always get set_weights log first
-        set_weights_data = await self.redis.get(self.set_weights_key)
-        if set_weights_data:
-            column = json.loads(set_weights_data)
-            elapsed = time.time() - column["start_time"]
-            content = "\n".join(column["logs"])
+
+        # Retrieve logs from Redis
+        keys = await self.redis.keys("forward_log:*")
+        if not keys:
+            return Columns([])
+
+        logs = await self.redis.mget(keys)
+        log_entries = {key: json.loads(log) for key, log in zip(keys, logs) if log}
+
+        # Always prioritize set_weights log
+        set_weights_log = log_entries.pop(self.set_weights_key, None)
+        if set_weights_log:
+            elapsed = time.time() - set_weights_log["start_time"]
             panels.append(
                 Panel(
-                    content,
+                    "\n".join(set_weights_log["logs"]),
                     title=f"[bold green]Set Weights[/] ({elapsed:.1f}s)",
                     width=40,
                 )
             )
 
-        # Get all active log keys except set_weights
-        keys = await self.redis.keys("forward_log:*")
-        keys = [k for k in keys if k != self.set_weights_key]
-        keys = sorted(keys)[
-            -(self.max_columns - 1) :
-        ]  # Keep one less to account for set_weights panel
+        # Sort logs by time and keep the latest ones
+        sorted_logs = sorted(
+            log_entries.values(), key=lambda x: x["start_time"], reverse=True
+        )[: self.max_columns - len(panels)]
 
-        for key in keys:
-            log_data = await self.redis.get(key)
-            if log_data:
-                column = json.loads(log_data)
-                elapsed = time.time() - column["start_time"]
-                content = "\n".join(column["logs"])
-                panels.append(
-                    Panel(
-                        content,
-                        title=f"[bold blue]Forward {column['id']}[/] ({elapsed:.1f}s)",
-                        width=40,
-                    )
+        # Generate panels for each log
+        for log in sorted_logs:
+            elapsed = time.time() - log["start_time"]
+            panels.append(
+                Panel(
+                    "\n".join(log["logs"]),
+                    title=f"[bold blue]Forward {log['id']}[/] ({elapsed:.1f}s)",
+                    width=40,
                 )
+            )
+
         return Columns(panels)
 
     async def __aenter__(self):
