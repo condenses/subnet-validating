@@ -50,6 +50,10 @@ class ValidatingConfig(BaseModel):
     scoring_rate: ScoringRateConfig = ScoringRateConfig()
 
 
+class ViewerConfig(BaseModel):
+    refresh_interval: int = 1
+
+
 class WalletConfig(BaseModel):
     path: str = "~/.bittensor/wallets"
     name: str = "default"
@@ -65,6 +69,7 @@ class Settings(BaseSettings):
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     restful_bittensor: RestfulBittensorConfig = RestfulBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
+    viewer: ViewerConfig = ViewerConfig()
 
     class Config:
         env_nested_delimiter = "__"
