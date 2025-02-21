@@ -34,7 +34,7 @@ class RedisManager:
         """Add a log message to Redis"""
         timestamp = datetime.now().isoformat()
         log_key = f"log:{forward_uuid}"
-        
+
         # Store log entry as a hash with timestamp and message
         await self.redis.hset(log_key, timestamp, message)
         await self.redis.expire(log_key, self.log_ttl)
@@ -43,4 +43,5 @@ class RedisManager:
         """Get all logs for a specific forward UUID"""
         log_key = f"log:{forward_uuid}"
         logs = await self.redis.hgetall(log_key)
-        return [(ts.decode(), msg.decode()) for ts, msg in logs.items()]
+        # Since decode_responses=True, the values are already decoded
+        return [(ts, msg) for ts, msg in logs.items()]
