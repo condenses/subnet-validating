@@ -29,7 +29,8 @@ export HF_TOKEN=your_huggingface_token
 - Run
 
 ```bash
-pm2 start python --name "synthesizing" -m uvicorn condenses_synthesizing.server:app --host localhost --port 9100
+echo "HF_TOKEN=your_huggingface_token" >> .synthesizing.env
+pm2 start python --name "synthesizing" -- -m uvicorn condenses_synthesizing.server:app --host localhost --port 9100
 ```
 
 3. Node Managing
