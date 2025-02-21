@@ -1,26 +1,56 @@
 import asyncio
-from datetime import datetime
-from typing import List, Tuple
 from collections import deque
+from datetime import datetime
+
 import redis.asyncio as aioredis
-from rich.console import Console
-from rich.table import Table
+from textual.app import App, ComposeResult
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import Static, Header, Footer
 
 
-class LogViewer:
-    """A simple log viewer using rich for terminal output."""
+class LogViewerApp(App):
+    """A Textual app to display logs from Redis."""
 
-    def __init__(self):
-        self.console = Console()
+    CSS = """
+    Screen {
+        layout: vertical;
+    }
+    .log-container {
+        border: solid green;
+        height: 1fr;
+    }
+    .log-title {
+        background: green;
+        color: black;
+    }
+    .log-content {
+        padding: 1;
+    }
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.redis = aioredis.Redis(
             host="localhost", port=6379, db=0, decode_responses=True
         )
         self.set_weights_logs = deque(maxlen=6)
         self.regular_logs = deque(maxlen=6)
 
-    async def fetch_logs(self) -> List[Tuple[str, List[Tuple[str, str]]]]:
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Horizontal():
+            with VerticalScroll(id="set-weights-container", classes="log-container"):
+                yield Static("Set Weights Logs", classes="log-title")
+                self.set_weights_log_widget = Static(classes="log-content")
+                yield self.set_weights_log_widget
+            with VerticalScroll(id="batch-logs-container", classes="log-container"):
+                yield Static("Batch Logs", classes="log-title")
+                self.batch_logs_widget = Static(classes="log-content")
+                yield self.batch_logs_widget
+        yield Footer()
+
+    async def fetch_logs(self):
         """Retrieve log data from Redis."""
-        keys = []
         self.set_weights_logs.clear()
         self.regular_logs.clear()
 
@@ -37,63 +67,36 @@ class LogViewer:
             else:
                 self.regular_logs.append((uuid, logs))
 
-        return list(self.regular_logs)
-
-    def display_logs(self):
-        """Display logs using rich."""
-        table = Table(title="Log Viewer")
-
-        table.add_column("Set Weights Logs", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Batch Logs", style="magenta")
-
-        # Left column: "set_weights" logs
-        set_weights_content = []
-        for uuid, logs in self.set_weights_logs:
-            for timestamp, message in logs:
+    def format_logs(self, logs):
+        """Format logs for display."""
+        formatted_logs = []
+        for uuid, log_entries in logs:
+            formatted_logs.append(f"--- {uuid[:8]} ---")
+            for timestamp, message in log_entries:
                 try:
                     dt = datetime.fromisoformat(timestamp)
                     formatted_time = dt.strftime("%H:%M:%S")
-                except Exception:
+                except ValueError:
                     formatted_time = timestamp
-                set_weights_content.append(f"{uuid[:8]} {formatted_time} {message}")
+                formatted_logs.append(f"{formatted_time} {message}")
+        return "\n".join(formatted_logs)
 
-        # Right column: Batch logs by UUID
-        batch_logs_content = []
-        for uuid, logs in self.regular_logs:
-            batch_logs_content.append(f"--- {uuid[:8]} ---")  # Delimiter for each UUID
-            for timestamp, message in logs:
-                try:
-                    dt = datetime.fromisoformat(timestamp)
-                    formatted_time = dt.strftime("%H:%M:%S")
-                except Exception:
-                    formatted_time = timestamp
-                batch_logs_content.append(f"{formatted_time} {message}")
-
-        # Add rows to the table
-        max_length = max(len(set_weights_content), len(batch_logs_content))
-        for i in range(max_length):
-            left = set_weights_content[i] if i < len(set_weights_content) else ""
-            right = batch_logs_content[i] if i < len(batch_logs_content) else ""
-            table.add_row(left, right)
-
-        self.console.print(table)
-
-    async def run(self):
-        """Main loop to fetch and display logs."""
+    async def update_logs(self):
+        """Fetch and display logs."""
         while True:
             await self.fetch_logs()
-            self.console.clear()
-            self.display_logs()
+            self.set_weights_log_widget.update(self.format_logs(self.set_weights_logs))
+            self.batch_logs_widget.update(self.format_logs(self.regular_logs))
             await asyncio.sleep(2)
 
-    async def close(self):
-        """Close the Redis connection."""
+    async def on_mount(self):
+        """Start the log fetching loop when the app mounts."""
+        self.run_worker(self.update_logs())
+
+    async def on_unmount(self):
+        """Close the Redis connection when the app unmounts."""
         await self.redis.close()
 
 
 if __name__ == "__main__":
-    viewer = LogViewer()
-    try:
-        asyncio.run(viewer.run())
-    except KeyboardInterrupt:
-        asyncio.run(viewer.close())
+    LogViewerApp().run()
