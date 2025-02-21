@@ -20,7 +20,7 @@ class ForwardLog:
         # Get existing logs or create new entry
         redis_key = f"forward_log:{synapse_id}"
         log_data = await self.redis.get(redis_key)
-        
+
         if log_data:
             column = json.loads(log_data)
         else:
@@ -29,16 +29,16 @@ class ForwardLog:
                 "logs": [],
                 "start_time": time.time()
             }
-            
+
         column["logs"].append(message)
-        
+
         # Store updated logs with TTL
         await self.redis.set(
             redis_key,
             json.dumps(column),
             ex=self.ttl
         )
-        
+
         self.live.update(await self.render())
 
     async def remove_log(self, forward_uuid: str, duration: float = 5):
@@ -50,7 +50,7 @@ class ForwardLog:
         # Get all active log keys
         keys = await self.redis.keys("forward_log:*")
         keys = sorted(keys)[-self.max_columns:]  # Keep only most recent logs
-        
+
         for key in keys:
             log_data = await self.redis.get(key)
             if log_data:
@@ -66,9 +66,9 @@ class ForwardLog:
                 )
         return Columns(panels)
 
-    def __enter__(self):
+    async def __aenter__(self):
         self.live.start()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
         self.live.stop()
