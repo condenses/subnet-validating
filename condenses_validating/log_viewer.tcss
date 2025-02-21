@@ -18,12 +18,12 @@ LogPanel {
 /* UUID header styling */
 LogPanel > Static {
     text-style: bold;
-    color: $text-primary;
+    color: $primary;
 }
 
 /* Timestamp styling */
 .timestamp {
-    color: $text-secondary;
+    color: $secondary;
 }
 
 /* Message styling */
