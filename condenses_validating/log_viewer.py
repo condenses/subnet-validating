@@ -17,7 +17,7 @@ class LogPanel(Static):
         super().__init__(**kwargs)
 
     def render(self) -> str:
-        header = f"[bold blue]{self.uuid[:8]}[/bold blue]\n"
+        header = f"[bold]{self.uuid[:8]}[/bold]\n"
         body = ""
         # Show the last 6 log entries
         for timestamp, message in self.logs[-6:]:
@@ -26,14 +26,15 @@ class LogPanel(Static):
                 formatted_time = dt.strftime("%H:%M:%S")
             except Exception:
                 formatted_time = timestamp
-            body += f"[cyan]{formatted_time}[/cyan] {message}\n"
+            body += f"[secondary]{formatted_time}[/secondary] {message}\n"
         if not body:
-            body = "[dim]No logs available[/dim]"
+            body = "[dim italic]No logs available[/dim italic]"
         return header + body
 
 
 class TextualLogViewer(App):
     BINDINGS = [("q", "quit", "Quit")]
+    CSS_PATH = "log_viewer.tcss"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -69,11 +70,11 @@ class TextualLogViewer(App):
         """Fetch logs and update the grid container."""
         logs_data = await self.fetch_logs()
         grid = self.query_one("#logs-grid", Grid)
-        
+
         # Remove all existing panels
         for child in grid.children:
             child.remove()
-        
+
         # Mount new panels
         for uuid, logs in logs_data:
             grid.mount(LogPanel(uuid, logs))
