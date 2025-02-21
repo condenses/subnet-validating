@@ -179,6 +179,7 @@ class ValidatorCore:
         logger.info("Starting validator loop.")
         await self.redis_manager.flush_db()
         logger.info("Redis DB flushed")
+        asyncio.create_task(self.periodically_set_weights())
 
         while not self.should_exit:
             try:
@@ -197,24 +198,32 @@ class ValidatorCore:
     async def periodically_set_weights(self):
         while not self.should_exit:
             async with self.forward_log as log:
-                last_update = await self.restful_bittensor.get_last_update()
-                await log.add_log("set_weights", f"last_update: {last_update}")
-                uids, weights = await self.orchestrator.get_score_weights()
-                await log.add_log(
-                    "set_weights", f"uids: {uids[:10]}...\nweights: {weights[:10]}..."
-                )
-            result, msg = await self.restful_bittensor.set_weights(
-                uids=uids, weights=weights
-            )
-            async with self.forward_log as log:
-                await log.add_log(
-                    "set_weights",
-                    f"------{datetime.now()}------\n"
-                    f"uids: {uids[:10]}...\n"
-                    f"weights: {weights[:10]}...\n"
-                    f"result: {result}\n"
-                    f"msg: {msg}\n",
-                )
+                try:
+                    last_update = await self.restful_bittensor.get_last_update()
+                    await log.add_log("set_weights", f"last_update: {last_update}")
+                    uids, weights = await self.orchestrator.get_score_weights()
+                    await log.add_log(
+                        "set_weights",
+                        f"uids: {uids[:10]}...\nweights: {weights[:10]}...",
+                    )
+                except Exception as e:
+                    await log.add_log("set_weights", f"Error in getting weights: {e}")
+                    continue
+                try:
+                    result, msg = await self.restful_bittensor.set_weights(
+                        uids=uids, weights=weights
+                    )
+                    await log.add_log(
+                        "set_weights",
+                        f"------{datetime.now()}------\n"
+                        f"uids: {uids[:10]}...\n"
+                        f"weights: {weights[:10]}...\n"
+                        f"result: {result}\n"
+                        f"msg: {msg}\n",
+                    )
+                except Exception as e:
+                    await log.add_log("set_weights", f"Error in setting weights: {e}")
+                    continue
             await asyncio.sleep(60)
 
 
