@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections import deque
 from datetime import datetime
 
@@ -97,8 +98,8 @@ class LogViewerApp(App):
                 except ValueError:
                     formatted_time = timestamp
 
-                # Escape the ']' character in the message
-                message = message.replace("]", "\]")
+                # jsonize the message
+                message = json.loads(message)
 
                 formatted_logs.append(f"{formatted_time} {message}")
         return "\n".join(formatted_logs)
