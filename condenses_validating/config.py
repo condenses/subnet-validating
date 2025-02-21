@@ -44,6 +44,9 @@ class ValidatingConfig(BaseModel):
     forward_sleep: float = 4
     max_compress_rate: float = 0.8
     synthetic_rate_limit: float = 0.5
+    max_log_columns: int = 4
+    log_ttl: int = 300
+    panel_width: int = 40
     scoring_rate: ScoringRateConfig = ScoringRateConfig()
 
 
