@@ -42,6 +42,14 @@ pm2 start python --name "node_managing" -m uvicorn condenses_node_managing.serve
 
 4. Scoring
 
+- Environment variables:
+
+```bash
+echo "VLLM__BASE_URL=http://localhost:8000" >> .env
+```
+
+- Run:
+
 ```bash
 pm2 start python --name "scoring" -m uvicorn text_compress_scoring.server:app --host localhost --port 9102
 ```
