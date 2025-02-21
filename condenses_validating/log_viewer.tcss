@@ -1,38 +1,19 @@
-/* Main grid container */
 #logs-grid {
     layout: grid;
-    grid-size: 4;
-    grid-gutter: 1 2;
+    grid-size: 2;
+    grid-columns: 1fr 1fr;
     padding: 1;
 }
 
-/* Individual log panels */
+#left-column, #right-column {
+    height: 100%;
+    border: solid green;
+}
+
 LogPanel {
     height: auto;
-    min-height: 8;
-    background: $surface;
-    border: solid $primary-darken-2;
+    margin: 1;
     padding: 1;
-}
-
-/* UUID header styling */
-LogPanel > Static {
-    text-style: bold;
-    color: $primary;
-}
-
-/* Timestamp styling */
-.timestamp {
-    color: $secondary;
-}
-
-/* Message styling */
-.message {
-    color: $text;
-}
-
-/* Empty log styling */
-.empty-log {
-    color: $text-muted;
-    text-style: italic;
+    border: solid $accent;
+    background: $boost;
 } 

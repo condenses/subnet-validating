@@ -77,14 +77,22 @@ class TextualLogViewer(App):
         await self.fetch_logs()
         grid = self.query_one("#logs-grid", Grid)
 
+        # Clear existing panels
         for child in grid.children:
             child.remove()
 
+        # Left column: set_weights logs
+        left_column = Grid(id="left-column")
         for uuid, logs in self.set_weights_logs:
-            grid.mount(LogPanel(uuid, logs))
+            left_column.mount(LogPanel(uuid, logs))
 
+        # Right column: regular logs
+        right_column = Grid(id="right-column")
         for uuid, logs in self.regular_logs:
-            grid.mount(LogPanel(uuid, logs))
+            right_column.mount(LogPanel(uuid, logs))
+
+        grid.mount(left_column)
+        grid.mount(right_column)
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -93,7 +101,7 @@ class TextualLogViewer(App):
 
     async def on_mount(self) -> None:
         grid = self.query_one("#logs-grid", Grid)
-        grid.styles.grid_template_columns = "1fr repeat(2, 1fr)"
+        grid.styles.grid_template_columns = "1fr 1fr"  # Two equal columns
         self.set_interval(2, self.refresh_logs)
 
     async def on_unmount(self) -> None:
