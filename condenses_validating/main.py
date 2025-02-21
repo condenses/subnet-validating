@@ -213,21 +213,19 @@ class ValidatorCore:
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
 
-        async with self.redis_manager:
-            while not self.should_exit:
-                try:
-                    concurrent_forwards = [
-                        self.forward()
-                        for _ in range(CONFIG.validating.concurrent_forward)
-                    ]
-                    await asyncio.gather(*concurrent_forwards)
-                    await asyncio.sleep(8)
-                except Exception as e:
-                    logger.error(f"Forward error: {e}")
-                    traceback.print_exc()
-                except KeyboardInterrupt:
-                    logger.success("Validator killed by keyboard interrupt.")
-                    exit()
+        while not self.should_exit:
+            try:
+                concurrent_forwards = [
+                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
+                ]
+                await asyncio.gather(*concurrent_forwards)
+                await asyncio.sleep(8)
+            except Exception as e:
+                logger.error(f"Forward error: {e}")
+                traceback.print_exc()
+            except KeyboardInterrupt:
+                logger.success("Validator killed by keyboard interrupt.")
+                exit()
 
     async def periodically_set_weights(self):
         while not self.should_exit:
