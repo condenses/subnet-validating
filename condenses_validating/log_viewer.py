@@ -133,10 +133,19 @@ class LogViewer:
         # Create panels for each card
         panels = [card.create_panel() for card in self.log_cards.values()]
 
-        # Organize panels into columns
-        return Columns(
-            panels, equal=True, align="center", number_in_row=self.cards_per_row
-        )
+        # Split panels into rows
+        rows = []
+        for i in range(0, len(panels), self.cards_per_row):
+            row_panels = panels[i : i + self.cards_per_row]
+            rows.append(Columns(row_panels, equal=True, align="center"))
+
+        # Combine all rows into a single Text object
+        grid = Text()
+        for row in rows:
+            grid.append("\n")
+            grid.append(row)
+
+        return grid
 
     async def update_display(self, live: Live) -> None:
         """Update the display with fresh log data."""
