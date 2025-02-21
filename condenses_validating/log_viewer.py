@@ -26,7 +26,9 @@ class LogPanel(Static):
                 formatted_time = dt.strftime("%H:%M:%S")
             except Exception:
                 formatted_time = timestamp
-            body += f"[secondary]{formatted_time}[/secondary] {message}\n"
+            # Escape the message to prevent markup interpretation
+            escaped_message = message.replace("[", "\\[").replace("]", "\\]")
+            body += f"[secondary]{formatted_time}[/secondary] {escaped_message}\n"
         if not body:
             body = "[dim italic]No logs available[/dim italic]"
         return header + body
