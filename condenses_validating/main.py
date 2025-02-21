@@ -237,12 +237,19 @@ class ValidatorCore:
                 result, msg = await self.restful_bittensor.set_weights(
                     uids=uids, weights=weights, netuid=47, version=99
                 )
-                await self.redis_manager.add_log(
-                    "set_weights",
-                    f"Updated weights at {datetime.now()}\n"
-                    f"Top UIDs: {uids[:5]}\n"
-                    f"Top Weights: {weights[:5]}",
-                )
+                if result:
+                    await self.redis_manager.add_log(
+                        "set_weights",
+                        f"Updated weights at {datetime.now()}\n"
+                        f"Top UIDs: {uids[:5]}\n"
+                        f"Top Weights: {weights[:5]}\n"
+                        f"{msg}",
+                    )
+                else:
+                    await self.redis_manager.add_log(
+                        "set_weights",
+                        f"Failed to update weights: {msg}",
+                    )
             except Exception as e:
                 logger.error(f"Weight update error: {e}")
             await asyncio.sleep(60)
