@@ -13,6 +13,7 @@ from .redis_manager import RedisManager
 from .response_processor import ResponseProcessor
 from .log_processor import ForwardLog
 import uuid
+from datetime import datetime
 
 
 class ScoringManager:
@@ -98,7 +99,7 @@ class ValidatorCore:
         )
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.forward_log = ForwardLog()
+        self.forward_log = ForwardLog(redis_client=self.redis_client)
 
         self.wallet = bt.wallet(
             path=CONFIG.wallet.path,
@@ -189,6 +190,27 @@ class ValidatorCore:
             except KeyboardInterrupt:
                 logger.success("Validator killed by keyboard interrupt.")
                 exit()
+
+    async def periodically_set_weights(self):
+        while not self.should_exit:
+            with self.forward_log as log:
+                last_update = await self.restful_bittensor.get_last_update()
+                log.add_log("set_weights", f"last_update: {last_update}")
+                uids, weights = await self.orchestrator.get_score_weights()
+                log.add_log("set_weights", f"uids: {uids[:10]}...\nweights: {weights[:10]}...")
+            result, msg = await self.restful_bittensor.set_weights(
+                uids=uids, weights=weights
+            )
+            with self.forward_log as log:
+                log.add_log(
+                    "set_weights",
+                    f"------{datetime.now()}------\n"
+                    f"uids: {uids[:10]}...\n"
+                    f"weights: {weights[:10]}...\n"
+                    f"result: {result}\n"
+                    f"msg: {msg}\n",
+                )
+            await asyncio.sleep(60)
 
 
 def start_loop():
