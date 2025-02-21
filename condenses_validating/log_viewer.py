@@ -2,49 +2,19 @@ import asyncio
 from datetime import datetime
 from typing import List, Tuple
 from collections import deque
-
-from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static
-from textual.containers import Grid
 import redis.asyncio as aioredis
+from rich.console import Console
+from rich.table import Table
 
 
-class LogPanel(Static):
-    """A widget to display logs as simple text."""
+class LogViewer:
+    """A simple log viewer using rich for terminal output."""
 
-    def __init__(self, uuid: str, logs: List[Tuple[str, str]], **kwargs) -> None:
-        self.uuid = uuid
-        self.logs = logs
-        super().__init__(**kwargs)
-
-    def render(self) -> str:
-        # Simple text output without styling
-        output = f"{self.uuid[:8]}\n"
-        filtered_logs = [
-            (ts, msg) for ts, msg in self.logs if "Forward complete" not in msg
-        ]
-        for timestamp, message in filtered_logs[-4:]:
-            try:
-                dt = datetime.fromisoformat(timestamp)
-                formatted_time = dt.strftime("%H:%M:%S")
-            except Exception:
-                formatted_time = timestamp
-            output += f"{formatted_time} {message}\n"
-        if not filtered_logs:
-            output += "No logs available\n"
-        return output
-
-
-class TextualLogViewer(App):
-    BINDINGS = [("q", "quit", "Quit")]
-    CSS_PATH = "log_viewer.tcss"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self):
+        self.console = Console()
         self.redis = aioredis.Redis(
             host="localhost", port=6379, db=0, decode_responses=True
         )
-        self.max_panels = 12
         self.set_weights_logs = deque(maxlen=6)
         self.regular_logs = deque(maxlen=6)
 
@@ -69,41 +39,50 @@ class TextualLogViewer(App):
 
         return list(self.regular_logs)
 
-    async def refresh_logs(self) -> None:
-        """Fetch logs and update the grid container."""
-        await self.fetch_logs()
-        grid = self.query_one("#logs-grid", Grid)
+    def display_logs(self):
+        """Display logs using rich."""
+        table = Table(title="Log Viewer")
 
-        # Clear existing content
-        for child in grid.children:
-            child.remove()
+        table.add_column("UUID", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Timestamp", style="magenta")
+        table.add_column("Message", style="green")
 
-        # Left column: set_weights logs
-        left_column = Grid(id="left-column")
         for uuid, logs in self.set_weights_logs:
-            left_column.mount(LogPanel(uuid, logs, classes="log-text"))
+            for timestamp, message in logs:
+                try:
+                    dt = datetime.fromisoformat(timestamp)
+                    formatted_time = dt.strftime("%H:%M:%S")
+                except Exception:
+                    formatted_time = timestamp
+                table.add_row(uuid[:8], formatted_time, message)
 
-        # Right column: regular logs
-        right_column = Grid(id="right-column")
         for uuid, logs in self.regular_logs:
-            right_column.mount(LogPanel(uuid, logs, classes="log-text"))
+            for timestamp, message in logs:
+                try:
+                    dt = datetime.fromisoformat(timestamp)
+                    formatted_time = dt.strftime("%H:%M:%S")
+                except Exception:
+                    formatted_time = timestamp
+                table.add_row(uuid[:8], formatted_time, message)
 
-        grid.mount(left_column)
-        grid.mount(right_column)
+        self.console.print(table)
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Grid(id="logs-grid")
-        yield Footer()
+    async def run(self):
+        """Main loop to fetch and display logs."""
+        while True:
+            await self.fetch_logs()
+            self.console.clear()
+            self.display_logs()
+            await asyncio.sleep(2)
 
-    async def on_mount(self) -> None:
-        grid = self.query_one("#logs-grid", Grid)
-        grid.styles.grid_template_columns = "1fr 1fr"  # Two equal columns
-        self.set_interval(2, self.refresh_logs)
-
-    async def on_unmount(self) -> None:
+    async def close(self):
+        """Close the Redis connection."""
         await self.redis.close()
 
 
 if __name__ == "__main__":
-    TextualLogViewer().run()
+    viewer = LogViewer()
+    try:
+        asyncio.run(viewer.run())
+    except KeyboardInterrupt:
+        asyncio.run(viewer.close())
