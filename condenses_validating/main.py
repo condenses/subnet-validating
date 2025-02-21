@@ -1,236 +1,90 @@
-import bittensor as bt
-from condenses_node_managing.client import AsyncOrchestratorClient
-from text_compress_scoring.client import AsyncScoringClient
-from restful_bittensor.client import AsyncRestfulBittensor
-from condenses_synthesizing.client import AsyncSynthesizingClient
-from condenses_validating.config import CONFIG
-from .protocol import TextCompressProtocol
+from rich.console import Console
+from rich.columns import Columns
+from rich.panel import Panel
+from rich.live import Live
+import time
 import asyncio
-from loguru import logger
+import json
 from redis.asyncio import Redis
-import traceback
-from .redis_manager import RedisManager
-from .response_processor import ResponseProcessor
-from .log_processor import ForwardLog
-import uuid
-from datetime import datetime
 
 
-class ScoringManager:
-    def __init__(self, scoring_client: AsyncScoringClient, redis_manager: RedisManager):
-        self.scoring_client = scoring_client
-        self.redis_manager = redis_manager
-        self.response_processor = ResponseProcessor()
-        logger.info("ScoringManager initialized")
+class ForwardLog:
+    def __init__(self, redis_client: Redis, max_columns=4, ttl=300):
+        self.console = Console()
+        self.redis = redis_client
+        self.max_columns = max_columns
+        self.ttl = ttl  # Log expiration time (default: 5 minutes)
+        self.live = Live(console=self.console, refresh_per_second=4)
+        self.set_weights_key = "forward_log:set_weights"
 
-    async def get_scores(
-        self,
-        responses: list[TextCompressProtocol],
-        synthetic_synapse: TextCompressProtocol,
-        uids: list[int],
-        log: ForwardLog,
-        forward_uuid: str,
-    ) -> tuple[list[int], list[float]]:
-        await log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
-        valid, invalid = await self.response_processor.validate_responses(
-            uids, responses, synthetic_synapse
+    async def add_log(self, synapse_id: str, message: str):
+        """Adds a log message for a given synapse ID."""
+        redis_key = f"forward_log:{synapse_id}"
+        log_data = await self.redis.get(redis_key)
+
+        column = (
+            json.loads(log_data)
+            if log_data
+            else {"id": synapse_id, "logs": [], "start_time": time.time()}
         )
 
-        invalid_uids = [uid for uid, _, _ in invalid]
-        invalid_scores = [0] * len(invalid)
-        valid_uids = [uid for uid, _ in valid]
-        valid_responses = [response for _, response in valid]
+        column["logs"].append(message)
+        await self.redis.set(redis_key, json.dumps(column), ex=self.ttl)
 
-        if not valid_uids:
-            await log.add_log(forward_uuid, "Warning: No valid responses received")
-            return invalid_uids, invalid_scores
+        # Update UI only if live display is running
+        if self.live.is_started:
+            self.live.update(await self.render())
 
-        await log.add_log(forward_uuid, f"Validating {len(valid_uids)} UIDs")
-        scored_counter = await self.redis_manager.get_scored_counter()
-        valid_uids_to_score = [
-            uid
-            for uid in valid_uids
-            if scored_counter.get(uid, 0)
-            < CONFIG.validating.scoring_rate.max_scoring_count
-        ]
+    async def remove_log(self, forward_uuid: str, duration: float = 5):
+        """Removes a log entry after a delay."""
+        await asyncio.sleep(duration)
+        await self.redis.delete(f"forward_log:{forward_uuid}")
 
-        if valid_uids_to_score:
-            await log.add_log(forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs")
-            original_user_message = synthetic_synapse.user_message
-            valid_scores = await self.scoring_client.score_batch(
-                original_user_message=original_user_message,
-                batch_compressed_user_messages=[
-                    response.compressed_context for response in valid_responses
-                ],
-                timeout=360,
-            )
-            await log.add_log(forward_uuid, f"Received scores: {valid_scores}")
-            valid_scores = [
-                score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
-                for score, valid_responses in zip(valid_scores, valid_responses)
-            ]
-            await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            await log.add_log(forward_uuid, "Updated scoring records in Redis")
-        else:
-            await log.add_log(forward_uuid, "Warning: No UIDs eligible for scoring")
-            valid_uids = []
-            valid_scores = []
+    async def render(self):
+        """Generates the Rich UI representation of the logs."""
+        panels = []
 
-        final_uids = invalid_uids + valid_uids
-        final_scores = invalid_scores + valid_scores
-        await log.add_log(
-            forward_uuid,
-            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
-        )
-        return final_uids, final_scores
+        # Retrieve logs from Redis
+        keys = await self.redis.keys("forward_log:*")
+        if not keys:
+            return Columns([])
 
+        logs = await self.redis.mget(keys)
+        log_entries = {key: json.loads(log) for key, log in zip(keys, logs) if log}
 
-class ValidatorCore:
-    def __init__(self):
-        logger.info("Initializing ValidatorCore")
-        self.redis_client = Redis(
-            host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
-        )
-        self.redis_manager = RedisManager(self.redis_client)
-        self.orchestrator = AsyncOrchestratorClient(CONFIG.orchestrator.base_url)
-        self.scoring_client = AsyncScoringClient(CONFIG.scoring.base_url)
-        self.restful_bittensor = AsyncRestfulBittensor(
-            CONFIG.restful_bittensor.base_url
-        )
-        self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
-        self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.forward_log = ForwardLog(redis_client=self.redis_client)
-
-        self.wallet = bt.wallet(
-            path=CONFIG.wallet.path,
-            name=CONFIG.wallet.name,
-            hotkey=CONFIG.wallet.hotkey,
-        )
-        logger.info(f"Wallet initialized: {self.wallet}")
-        self.dendrite = bt.Dendrite(wallet=self.wallet)
-        self.should_exit = False
-        logger.success("ValidatorCore initialization complete")
-
-    async def get_synthetic(self) -> TextCompressProtocol:
-        synth_response = await self.synthesizing.get_message()
-        user_message = synth_response.user_message
-        return TextCompressProtocol(user_message=user_message)
-
-    async def get_axons(self, uids: list[int]) -> list[bt.AxonInfo]:
-        string_axons = await self.restful_bittensor.get_axons(uids=uids)
-        axons = [bt.AxonInfo.from_string(axon) for axon in string_axons]
-        return axons
-
-    async def forward(self):
-        forward_uuid = str(uuid.uuid4())
-        async with self.forward_log as log:
-            await log.add_log(forward_uuid, "Starting forward pass")
-            uids = await self.orchestrator.consume_rate_limits(
-                uid=None,
-                top_fraction=1.0,
-                count=CONFIG.validating.batch_size,
-                acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
-                timeout=12,
-            )
-            try:
-                synthetic_synapse = await self.get_synthetic()
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
-                return
-            await log.add_log(forward_uuid, f"Processing UIDs: {uids}")
-            try:
-                axons = await self.get_axons(uids)
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in getting axons: {e}")
-                return
-            await log.add_log(forward_uuid, f"Got {len(axons)} axons")
-
-            forward_synapse = TextCompressProtocol(
-                context=synthetic_synapse.user_message
-            )
-            responses = await self.dendrite.forward(
-                axons=axons,
-                synapse=forward_synapse,
-                timeout=12,
-            )
-            await log.add_log(forward_uuid, f"Received {len(responses)} responses")
-            try:
-                uids, scores = await self.scoring_manager.get_scores(
-                    responses=responses,
-                    synthetic_synapse=synthetic_synapse,
-                    uids=uids,
-                    log=log,
-                    forward_uuid=forward_uuid,
+        # Always prioritize set_weights log
+        set_weights_log = log_entries.pop(self.set_weights_key, None)
+        if set_weights_log:
+            elapsed = time.time() - set_weights_log["start_time"]
+            panels.append(
+                Panel(
+                    "\n".join(set_weights_log["logs"]),
+                    title=f"[bold green]Set Weights[/] ({elapsed:.1f}s)",
+                    width=40,
                 )
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in scoring: {e}")
-                return
-            await log.add_log(forward_uuid, f"Scored {len(scores)} responses")
+            )
 
-            futures = [
-                self.orchestrator.update_stats(uid=uid, new_score=score)
-                for uid, score in zip(uids, scores)
-            ]
-            await asyncio.gather(*futures)
-            await log.add_log(forward_uuid, "✓ Forward complete")
+        # Sort logs by time and keep the latest ones
+        sorted_logs = sorted(
+            log_entries.values(), key=lambda x: x["start_time"], reverse=True
+        )[: self.max_columns - len(panels)]
 
-    async def run(self) -> None:
-        """Main validator loop"""
-        logger.info("Starting validator loop.")
-        await self.redis_manager.flush_db()
-        logger.info("Redis DB flushed")
-        asyncio.create_task(self.periodically_set_weights())
+        # Generate panels for each log
+        for log in sorted_logs:
+            elapsed = time.time() - log["start_time"]
+            panels.append(
+                Panel(
+                    "\n".join(log["logs"]),
+                    title=f"[bold blue]Forward {log['id']}[/] ({elapsed:.1f}s)",
+                    width=40,
+                )
+            )
 
-        while not self.should_exit:
-            try:
-                concurrent_forwards = [
-                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
-                ]
-                await asyncio.gather(*concurrent_forwards)
-                await asyncio.sleep(8)
-            except Exception as e:
-                logger.error(f"Forward error: {e}")
-                traceback.print_exc()
-            except KeyboardInterrupt:
-                logger.success("Validator killed by keyboard interrupt.")
-                exit()
+        return Columns(panels)
 
-    async def periodically_set_weights(self):
-        while not self.should_exit:
-            async with self.forward_log as log:
-                try:
-                    last_update = await self.restful_bittensor.get_last_update()
-                    await log.add_log("set_weights", f"last_update: {last_update}")
-                    uids, weights = await self.orchestrator.get_score_weights()
-                    await log.add_log(
-                        "set_weights",
-                        f"uids: {uids[:10]}...\nweights: {weights[:10]}...",
-                    )
-                except Exception as e:
-                    await log.add_log("set_weights", f"Error in getting weights: {e}")
-                    await asyncio.sleep(60)
-                    continue
-                try:
-                    result, msg = await self.restful_bittensor.set_weights(
-                        uids=uids, weights=weights, netuid=47, version=99
-                    )
-                    await log.add_log(
-                        "set_weights",
-                        f"------{datetime.now()}------\n"
-                        f"uids: {uids[:10]}...\n"
-                        f"weights: {weights[:10]}...\n"
-                        f"result: {result}\n"
-                        f"msg: {msg}\n",
-                    )
-                except Exception as e:
-                    await log.add_log("set_weights", f"Error in setting weights: {e}")
-                    await asyncio.sleep(60)
-                    continue
-            await asyncio.sleep(60)
+    async def __aenter__(self):
+        self.live.start()
+        return self
 
-
-def start_loop():
-    logger.info("Initializing validator")
-    validator = ValidatorCore()
-    logger.info("Starting validator loop")
-    asyncio.run(validator.run())
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.live.stop()
