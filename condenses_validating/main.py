@@ -124,10 +124,10 @@ class ValidatorCore:
         )
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.wallet = bt.wallet(
-            path=CONFIG.wallet.path,
-            name=CONFIG.wallet.name,
-            hotkey=CONFIG.wallet.hotkey,
+        self.wallet = bt.Wallet(
+            path=CONFIG.wallet_path,
+            name=CONFIG.wallet_name,
+            hotkey=CONFIG.wallet_hotkey,
         )
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
