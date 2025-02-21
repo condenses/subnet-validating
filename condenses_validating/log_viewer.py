@@ -1,114 +1,120 @@
 from rich.console import Console
 from rich.panel import Panel
+from rich.layout import Layout
+from rich.live import Live
 from rich.table import Table
 from rich.text import Text
-from rich.layout import Layout
-from rich.style import Style
 from datetime import datetime
-from typing import List, Dict, Any
-
+import asyncio
+from redis.asyncio import Redis
+from .redis_manager import RedisManager
+from .config import CONFIG
 
 class LogViewer:
     def __init__(self):
         self.console = Console()
+        self.redis_client = Redis(
+            host=CONFIG.redis.host, 
+            port=CONFIG.redis.port, 
+            db=CONFIG.redis.db
+        )
+        self.redis_manager = RedisManager(self.redis_client)
+        self.grid_size = 4
+        self.max_cards = self.grid_size * self.grid_size
 
-    def create_log_card(self, log_entry: Dict[str, Any]) -> Panel:
-        """Create a pretty panel for a single log entry."""
-        # Create a table for log details
-        table = Table(show_header=False, show_edge=False, box=None)
-        table.add_column("Key", style="bold cyan")
-        table.add_column("Value")
+    def make_log_card(self, uuid: str, logs: list[tuple[str, str]]) -> Panel:
+        """Create a panel containing log messages for a UUID"""
+        if not logs:
+            return Panel(
+                "[dim]No logs[/dim]",
+                title=f"[blue]{uuid[:8]}[/blue]",
+                border_style="dim"
+            )
 
-        # Format timestamp if present
-        timestamp = log_entry.get("timestamp")
-        if timestamp:
-            if isinstance(timestamp, (int, float)):
-                timestamp = datetime.fromtimestamp(timestamp).strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
-            table.add_row("Time", timestamp)
-
-        # Add other log fields
-        for key, value in log_entry.items():
-            if key != "timestamp":
-                # Format value based on type
-                if isinstance(value, (dict, list)):
-                    formatted_value = Text(str(value), style="yellow")
-                elif isinstance(value, bool):
-                    formatted_value = Text(
-                        str(value), style="green" if value else "red"
-                    )
-                elif isinstance(value, (int, float)):
-                    formatted_value = Text(str(value), style="blue")
-                else:
-                    formatted_value = Text(str(value))
-
-                table.add_row(key.capitalize(), formatted_value)
-
-        # Create panel with border style based on log level
-        level = log_entry.get("level", "").lower()
-        border_style = {
-            "error": "red",
-            "warning": "yellow",
-            "info": "blue",
-            "debug": "grey70",
-        }.get(level, "white")
+        # Format log entries
+        log_text = Text()
+        for timestamp, message in logs[-6:]:  # Show last 6 logs
+            dt = datetime.fromisoformat(timestamp)
+            log_text.append(f"{dt.strftime('%H:%M:%S')} ", style="cyan")
+            log_text.append(f"{message}\n")
 
         return Panel(
-            table,
-            title=f"[{level.upper()}]" if level else "",
-            border_style=border_style,
-            padding=(1, 2),
+            log_text,
+            title=f"[blue]{uuid[:8]}[/blue]",
+            title_align="left",
+            border_style="blue"
         )
 
-    def display_logs(self, logs: List[Dict[str, Any]]) -> None:
-        """Display multiple log entries as cards."""
-        # Clear screen first
-        self.console.clear()
+    def make_grid(self, uuids_with_logs: list[tuple[str, list]]) -> Table:
+        """Create a grid of log cards"""
+        grid = Table.grid(expand=True, padding=1)
+        
+        # Add 4 columns of equal width
+        for _ in range(self.grid_size):
+            grid.add_column(ratio=1)
 
-        # Create layout
-        layout = Layout()
-        layout.split_column(Layout(name="header", size=3), Layout(name="main"))
+        # Create rows of cards
+        rows = []
+        current_row = []
+        
+        # Fill with available logs
+        for uuid, logs in uuids_with_logs:
+            current_row.append(self.make_log_card(uuid, logs))
+            if len(current_row) == self.grid_size:
+                rows.append(current_row)
+                current_row = []
 
-        # Add header
-        header = Panel(
-            Text("Log Viewer", style="bold white", justify="center"), style="blue"
-        )
-        layout["header"].update(header)
+        # Fill remaining slots with empty panels
+        while len(current_row) < self.grid_size:
+            current_row.append(Panel("", border_style="dim"))
+        if current_row:
+            rows.append(current_row)
 
-        # Display each log as a card
-        for log in logs:
-            self.console.print(self.create_log_card(log))
-            # Add small spacing between cards
-            self.console.print()
+        # Add rows to grid
+        for row in rows[:self.grid_size]:
+            grid.add_row(*row)
 
+        return grid
 
-# Example usage
-if __name__ == "__main__":
-    # Sample logs for demonstration
-    sample_logs = [
-        {
-            "timestamp": datetime.now().timestamp(),
-            "level": "info",
-            "message": "Application started",
-            "details": {"version": "1.0.0", "environment": "production"},
-        },
-        {
-            "timestamp": datetime.now().timestamp(),
-            "level": "error",
-            "message": "Failed to connect to database",
-            "error_code": 500,
-            "retry_count": 3,
-        },
-        {
-            "timestamp": datetime.now().timestamp(),
-            "level": "warning",
-            "message": "High memory usage detected",
-            "memory_usage": "85%",
-            "threshold": "80%",
-        },
-    ]
+    async def update_display(self, live: Live) -> None:
+        """Update the display with latest logs"""
+        # Get all log keys
+        log_keys = []
+        async for key in self.redis_client.scan_iter("log:*"):
+            log_keys.append(key.decode())
 
-    # Create and use the log viewer
+        # Get logs for each UUID
+        uuids_with_logs = []
+        for key in log_keys[-self.max_cards:]:
+            uuid = key.split(":")[1]
+            logs = await self.redis_manager.get_logs(uuid)
+            uuids_with_logs.append((uuid, logs))
+
+        # Update the live display
+        grid = self.make_grid(uuids_with_logs)
+        live.update(grid)
+
+    async def run(self) -> None:
+        """Run the log viewer"""
+        with Live(
+            Panel("Loading logs...", title="Log Viewer"), 
+            refresh_per_second=2,
+            screen=True
+        ) as live:
+            while True:
+                try:
+                    await self.update_display(live)
+                    await asyncio.sleep(0.5)
+                except KeyboardInterrupt:
+                    break
+                except Exception as e:
+                    live.update(Panel(f"Error: {e}", border_style="red"))
+                    await asyncio.sleep(1)
+
+def start_viewer():
+    """Start the log viewer"""
     viewer = LogViewer()
-    viewer.display_logs(sample_logs)
+    asyncio.run(viewer.run())
+
+if __name__ == "__main__":
+    start_viewer()
