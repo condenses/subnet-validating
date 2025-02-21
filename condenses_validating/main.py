@@ -28,10 +28,11 @@ class ScoringManager:
         responses: list[TextCompressProtocol],
         synthetic_synapse: TextCompressProtocol,
         uids: list[int],
-        log: ForwardLog,
         forward_uuid: str,
     ) -> tuple[list[int], list[float]]:
-        await log.add_log(forward_uuid, f"Processing responses from {len(uids)} UIDs")
+        await self.redis_manager.add_log(
+            forward_uuid, f"Processing responses from {len(uids)} UIDs"
+        )
         valid, invalid = await self.response_processor.validate_responses(
             uids, responses, synthetic_synapse
         )
@@ -42,10 +43,14 @@ class ScoringManager:
         valid_responses = [response for _, response in valid]
 
         if not valid_uids:
-            await log.add_log(forward_uuid, "Warning: No valid responses received")
+            await self.redis_manager.add_log(
+                forward_uuid, "Warning: No valid responses received"
+            )
             return invalid_uids, invalid_scores
 
-        await log.add_log(forward_uuid, f"Validating {len(valid_uids)} UIDs")
+        await self.redis_manager.add_log(
+            forward_uuid, f"Validating {len(valid_uids)} UIDs"
+        )
         scored_counter = await self.redis_manager.get_scored_counter()
         valid_uids_to_score = [
             uid
@@ -55,7 +60,9 @@ class ScoringManager:
         ]
 
         if valid_uids_to_score:
-            await log.add_log(forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs")
+            await self.redis_manager.add_log(
+                forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs"
+            )
             original_user_message = synthetic_synapse.user_message
             valid_scores = await self.scoring_client.score_batch(
                 original_user_message=original_user_message,
@@ -64,21 +71,27 @@ class ScoringManager:
                 ],
                 timeout=360,
             )
-            await log.add_log(forward_uuid, f"Received scores: {valid_scores}")
+            await self.redis_manager.add_log(
+                forward_uuid, f"Received scores: {valid_scores}"
+            )
             valid_scores = [
                 score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
                 for score, valid_responses in zip(valid_scores, valid_responses)
             ]
             await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            await log.add_log(forward_uuid, "Updated scoring records in Redis")
+            await self.redis_manager.add_log(
+                forward_uuid, "Updated scoring records in Redis"
+            )
         else:
-            await log.add_log(forward_uuid, "Warning: No UIDs eligible for scoring")
+            await self.redis_manager.add_log(
+                forward_uuid, "Warning: No UIDs eligible for scoring"
+            )
             valid_uids = []
             valid_scores = []
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
-        await log.add_log(
+        await self.redis_manager.add_log(
             forward_uuid,
             f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
         )
@@ -99,13 +112,6 @@ class ValidatorCore:
         )
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.forward_log = ForwardLog(
-            redis_client=self.redis_client,
-            max_columns=CONFIG.validating.max_log_columns,
-            ttl=CONFIG.validating.log_ttl,
-            panel_width=CONFIG.validating.panel_width,
-        )
-
         self.wallet = bt.wallet(
             path=CONFIG.wallet.path,
             name=CONFIG.wallet.name,
@@ -128,7 +134,7 @@ class ValidatorCore:
 
     async def forward(self):
         forward_uuid = str(uuid.uuid4())
-        await self.forward_log.add_log(forward_uuid, "Starting forward pass")
+        await self.redis_manager.add_log(forward_uuid, "Starting forward pass")
         try:
             uids = await self.orchestrator.consume_rate_limits(
                 uid=None,
@@ -138,24 +144,26 @@ class ValidatorCore:
                 timeout=12,
             )
         except Exception as e:
-            await self.forward_log.add_log(
+            await self.redis_manager.add_log(
                 forward_uuid, f"Error in consuming rate limits: {e}"
             )
             return
         try:
             synthetic_synapse = await self.get_synthetic()
         except Exception as e:
-            await self.forward_log.add_log(
+            await self.redis_manager.add_log(
                 forward_uuid, f"Error in getting synthetic: {e}"
             )
             return
-        await self.forward_log.add_log(forward_uuid, f"Processing UIDs: {uids}")
+        await self.redis_manager.add_log(forward_uuid, f"Processing UIDs: {uids}")
         try:
             axons = await self.get_axons(uids)
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in getting axons: {e}")
+            await self.redis_manager.add_log(
+                forward_uuid, f"Error in getting axons: {e}"
+            )
             return
-        await self.forward_log.add_log(forward_uuid, f"Got {len(axons)} axons")
+        await self.redis_manager.add_log(forward_uuid, f"Got {len(axons)} axons")
 
         try:
             forward_synapse = TextCompressProtocol(
@@ -167,9 +175,9 @@ class ValidatorCore:
                 timeout=12,
             )
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in forwarding: {e}")
+            await self.redis_manager.add_log(forward_uuid, f"Error in forwarding: {e}")
             return
-        await self.forward_log.add_log(
+        await self.redis_manager.add_log(
             forward_uuid, f"Received {len(responses)} responses"
         )
         try:
@@ -177,13 +185,14 @@ class ValidatorCore:
                 responses=responses,
                 synthetic_synapse=synthetic_synapse,
                 uids=uids,
-                log=self.forward_log,
                 forward_uuid=forward_uuid,
             )
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in scoring: {e}")
+            await self.redis_manager.add_log(forward_uuid, f"Error in scoring: {e}")
             return
-        await self.forward_log.add_log(forward_uuid, f"Scored {len(scores)} responses")
+        await self.redis_manager.add_log(
+            forward_uuid, f"Scored {len(scores)} responses"
+        )
         try:
             futures = [
                 self.orchestrator.update_stats(uid=uid, new_score=score)
@@ -191,11 +200,11 @@ class ValidatorCore:
             ]
             await asyncio.gather(*futures)
         except Exception as e:
-            await self.forward_log.add_log(
+            await self.redis_manager.add_log(
                 forward_uuid, f"Error in updating stats: {e}"
             )
             return
-        await self.forward_log.add_log(forward_uuid, "✓ Forward complete")
+        await self.redis_manager.add_log(forward_uuid, "✓ Forward complete")
 
     async def run(self) -> None:
         """Main validator loop"""
@@ -204,7 +213,7 @@ class ValidatorCore:
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
 
-        async with self.forward_log:
+        async with self.redis_manager:
             while not self.should_exit:
                 try:
                     concurrent_forwards = [
@@ -227,7 +236,7 @@ class ValidatorCore:
                 result, msg = await self.restful_bittensor.set_weights(
                     uids=uids, weights=weights, netuid=47, version=99
                 )
-                await self.forward_log.add_log(
+                await self.redis_manager.add_log(
                     "set_weights",
                     f"Updated weights at {datetime.now()}\n"
                     f"Top UIDs: {uids[:5]}\n"
