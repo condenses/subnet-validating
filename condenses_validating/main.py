@@ -14,6 +14,17 @@ from .response_processor import ResponseProcessor
 from .log_processor import ForwardLog
 import uuid
 from datetime import datetime
+from pydantic import BaseModel
+import httpx
+from .secured_headers import get_headers
+
+
+class ScoringBatchLog(BaseModel):
+    uids: list[int]
+    scores: list[float]
+    compressed_user_messages: list[str]
+    original_user_message: str
+    forward_uuid: str
 
 
 class ScoringManager:
@@ -91,6 +102,7 @@ class ScoringManager:
 
         final_uids = invalid_uids + valid_uids
         final_scores = invalid_scores + valid_scores
+
         await self.redis_manager.add_log(
             forward_uuid,
             f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
@@ -123,6 +135,9 @@ class ValidatorCore:
         self.animation_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         self.animation_idx = 0
         logger.success("ValidatorCore initialization complete")
+        self.owner_server = httpx.AsyncClient(
+            base_url="https://reporting.condenses.ai",
+        )
 
     async def get_synthetic(self) -> TextCompressProtocol:
         synth_response = await self.synthesizing.get_message()
@@ -189,6 +204,23 @@ class ValidatorCore:
                 uids=uids,
                 forward_uuid=forward_uuid,
             )
+            batch_data = ScoringBatchLog(
+                uids=uids,
+                scores=scores,
+                compressed_user_messages=[
+                    response.compressed_context for response in responses
+                ],
+                original_user_message=synthetic_synapse.user_message,
+                forward_uuid=forward_uuid,
+            )
+            try:
+                await self.owner_server.post(
+                    "/api/v1/scoring_batch",
+                    json=batch_data.model_dump(),
+                    headers=get_headers(),
+                )
+            except Exception as e:
+                logger.error(f"Error in sending scoring batch to owner server: {e}")
         except Exception as e:
             await self.redis_manager.add_log(forward_uuid, f"Error in scoring: {e}")
             return

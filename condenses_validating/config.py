@@ -50,26 +50,22 @@ class ValidatingConfig(BaseModel):
     scoring_rate: ScoringRateConfig = ScoringRateConfig()
 
 
-class WalletConfig(BaseModel):
-    path: str = "~/.bittensor/wallets"
-    name: str = "default"
-    hotkey: str = "default"
-
-
 class Settings(BaseSettings):
     redis: RedisConfig = RedisConfig()
     server: ServerConfig = ServerConfig()
     validating: ValidatingConfig = ValidatingConfig()
-    wallet: WalletConfig = WalletConfig()
     scoring: ScoringConfig = ScoringConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     restful_bittensor: RestfulBittensorConfig = RestfulBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
+    wallet_name: str = "default"
+    wallet_hotkey: str = "default"
+    wallet_path: str = "~/.bittensor/wallets"
 
     class Config:
         env_nested_delimiter = "__"
         env_file = ".env"
-        extra = "allow"
+        extra = "ignore"
 
 
 CONFIG = Settings()
