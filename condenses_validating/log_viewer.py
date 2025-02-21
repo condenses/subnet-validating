@@ -71,6 +71,7 @@ class LogViewer:
         log_keys = []
         # Use async for to iterate over the async generator
         async for key in self.redis_client.scan_iter("log:*"):
+            # No need to decode since decode_responses=True
             log_keys.append(key)
 
         # Select the most recent keys based on our grid limit
