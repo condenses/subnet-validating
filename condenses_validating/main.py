@@ -99,7 +99,12 @@ class ValidatorCore:
         )
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
-        self.forward_log = ForwardLog(redis_client=self.redis_client)
+        self.forward_log = ForwardLog(
+            redis_client=self.redis_client,
+            max_columns=CONFIG.validating.max_log_columns,
+            ttl=CONFIG.validating.log_ttl,
+            panel_width=CONFIG.validating.panel_width
+        )
 
         self.wallet = bt.wallet(
             path=CONFIG.wallet.path,
@@ -123,67 +128,66 @@ class ValidatorCore:
 
     async def forward(self):
         forward_uuid = str(uuid.uuid4())
-        async with self.forward_log as log:
-            await log.add_log(forward_uuid, "Starting forward pass")
-            try:
-                uids = await self.orchestrator.consume_rate_limits(
-                    uid=None,
-                    top_fraction=1.0,
-                    count=CONFIG.validating.batch_size,
-                    acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
-                    timeout=12,
-                )
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in consuming rate limits: {e}")
-                return
-            try:
-                synthetic_synapse = await self.get_synthetic()
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
-                return
-            await log.add_log(forward_uuid, f"Processing UIDs: {uids}")
-            try:
-                axons = await self.get_axons(uids)
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in getting axons: {e}")
-                return
-            await log.add_log(forward_uuid, f"Got {len(axons)} axons")
+        await self.forward_log.add_log(forward_uuid, "Starting forward pass")
+        try:
+            uids = await self.orchestrator.consume_rate_limits(
+                uid=None,
+                top_fraction=1.0,
+                count=CONFIG.validating.batch_size,
+                acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
+                timeout=12,
+            )
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in consuming rate limits: {e}")
+            return
+        try:
+            synthetic_synapse = await self.get_synthetic()
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
+            return
+        await self.forward_log.add_log(forward_uuid, f"Processing UIDs: {uids}")
+        try:
+            axons = await self.get_axons(uids)
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in getting axons: {e}")
+            return
+        await self.forward_log.add_log(forward_uuid, f"Got {len(axons)} axons")
 
-            try:
-                forward_synapse = TextCompressProtocol(
-                    context=synthetic_synapse.user_message
-                )
-                responses = await self.dendrite.forward(
-                    axons=axons,
-                    synapse=forward_synapse,
-                    timeout=12,
-                )
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in forwarding: {e}")
-                return
-            await log.add_log(forward_uuid, f"Received {len(responses)} responses")
-            try:
-                uids, scores = await self.scoring_manager.get_scores(
-                    responses=responses,
-                    synthetic_synapse=synthetic_synapse,
-                    uids=uids,
-                    log=log,
-                    forward_uuid=forward_uuid,
-                )
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in scoring: {e}")
-                return
-            await log.add_log(forward_uuid, f"Scored {len(scores)} responses")
-            try:
-                futures = [
-                    self.orchestrator.update_stats(uid=uid, new_score=score)
-                    for uid, score in zip(uids, scores)
-                ]
-                await asyncio.gather(*futures)
-            except Exception as e:
-                await log.add_log(forward_uuid, f"Error in updating stats: {e}")
-                return
-            await log.add_log(forward_uuid, "✓ Forward complete")
+        try:
+            forward_synapse = TextCompressProtocol(
+                context=synthetic_synapse.user_message
+            )
+            responses = await self.dendrite.forward(
+                axons=axons,
+                synapse=forward_synapse,
+                timeout=12,
+            )
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in forwarding: {e}")
+            return
+        await self.forward_log.add_log(forward_uuid, f"Received {len(responses)} responses")
+        try:
+            uids, scores = await self.scoring_manager.get_scores(
+                responses=responses,
+                synthetic_synapse=synthetic_synapse,
+                uids=uids,
+                log=self.forward_log,
+                forward_uuid=forward_uuid,
+            )
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in scoring: {e}")
+            return
+        await self.forward_log.add_log(forward_uuid, f"Scored {len(scores)} responses")
+        try:
+            futures = [
+                self.orchestrator.update_stats(uid=uid, new_score=score)
+                for uid, score in zip(uids, scores)
+            ]
+            await asyncio.gather(*futures)
+        except Exception as e:
+            await self.forward_log.add_log(forward_uuid, f"Error in updating stats: {e}")
+            return
+        await self.forward_log.add_log(forward_uuid, "✓ Forward complete")
 
     async def run(self) -> None:
         """Main validator loop"""
@@ -192,51 +196,36 @@ class ValidatorCore:
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
 
-        while not self.should_exit:
-            try:
-                concurrent_forwards = [
-                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
-                ]
-                await asyncio.gather(*concurrent_forwards)
-                await asyncio.sleep(8)
-            except Exception as e:
-                logger.error(f"Forward error: {e}")
-                traceback.print_exc()
-            except KeyboardInterrupt:
-                logger.success("Validator killed by keyboard interrupt.")
-                exit()
+        async with self.forward_log.live:
+            while not self.should_exit:
+                try:
+                    concurrent_forwards = [
+                        self.forward() for _ in range(CONFIG.validating.concurrent_forward)
+                    ]
+                    await asyncio.gather(*concurrent_forwards)
+                    await asyncio.sleep(8)
+                except Exception as e:
+                    logger.error(f"Forward error: {e}")
+                    traceback.print_exc()
+                except KeyboardInterrupt:
+                    logger.success("Validator killed by keyboard interrupt.")
+                    exit()
 
     async def periodically_set_weights(self):
         while not self.should_exit:
-            async with self.forward_log as log:
-                try:
-                    last_update = await self.restful_bittensor.get_last_update()
-                    await log.add_log("set_weights", f"last_update: {last_update}")
-                    uids, weights = await self.orchestrator.get_score_weights()
-                    await log.add_log(
-                        "set_weights",
-                        f"uids: {uids[:10]}...\nweights: {weights[:10]}...",
-                    )
-                except Exception as e:
-                    await log.add_log("set_weights", f"Error in getting weights: {e}")
-                    await asyncio.sleep(60)
-                    continue
-                try:
-                    result, msg = await self.restful_bittensor.set_weights(
-                        uids=uids, weights=weights, netuid=47, version=99
-                    )
-                    await log.add_log(
-                        "set_weights",
-                        f"------{datetime.now()}------\n"
-                        f"uids: {uids[:10]}...\n"
-                        f"weights: {weights[:10]}...\n"
-                        f"result: {result}\n"
-                        f"msg: {msg}\n",
-                    )
-                except Exception as e:
-                    await log.add_log("set_weights", f"Error in setting weights: {e}")
-                    await asyncio.sleep(60)
-                    continue
+            try:
+                uids, weights = await self.orchestrator.get_score_weights()
+                result, msg = await self.restful_bittensor.set_weights(
+                    uids=uids, weights=weights, netuid=47, version=99
+                )
+                await self.forward_log.add_log(
+                    "set_weights",
+                    f"Updated weights at {datetime.now()}\n"
+                    f"Top UIDs: {uids[:5]}\n"
+                    f"Top Weights: {weights[:5]}"
+                )
+            except Exception as e:
+                logger.error(f"Weight update error: {e}")
             await asyncio.sleep(60)
 
 
