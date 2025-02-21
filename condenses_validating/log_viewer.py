@@ -10,7 +10,7 @@ import redis.asyncio as aioredis
 
 
 class LogPanel(Static):
-    """A widget to display logs for a specific UUID."""
+    """A widget to display logs as simple text."""
 
     def __init__(self, uuid: str, logs: List[Tuple[str, str]], **kwargs) -> None:
         self.uuid = uuid
@@ -18,9 +18,8 @@ class LogPanel(Static):
         super().__init__(**kwargs)
 
     def render(self) -> str:
-        header = f"[bold]{self.uuid[:8]}[/bold]\n"
-        body = ""
-        # Show the last 4 log entries, excluding "Forward complete" messages
+        # Simple text output without styling
+        output = f"{self.uuid[:8]}\n"
         filtered_logs = [
             (ts, msg) for ts, msg in self.logs if "Forward complete" not in msg
         ]
@@ -30,12 +29,10 @@ class LogPanel(Static):
                 formatted_time = dt.strftime("%H:%M:%S")
             except Exception:
                 formatted_time = timestamp
-            # Escape the message to prevent markup interpretation
-            escaped_message = message.replace("[", "\\[").replace("]", "\\]")
-            body += f"[secondary]{formatted_time}[/secondary] {escaped_message}\n"
-        if not body:
-            body = "[dim italic]No logs available[/dim italic]"
-        return header + body
+            output += f"{formatted_time} {message}\n"
+        if not filtered_logs:
+            output += "No logs available\n"
+        return output
 
 
 class TextualLogViewer(App):
@@ -77,19 +74,19 @@ class TextualLogViewer(App):
         await self.fetch_logs()
         grid = self.query_one("#logs-grid", Grid)
 
-        # Clear existing panels
+        # Clear existing content
         for child in grid.children:
             child.remove()
 
         # Left column: set_weights logs
         left_column = Grid(id="left-column")
         for uuid, logs in self.set_weights_logs:
-            left_column.mount(LogPanel(uuid, logs))
+            left_column.mount(LogPanel(uuid, logs, classes="log-text"))
 
         # Right column: regular logs
         right_column = Grid(id="right-column")
         for uuid, logs in self.regular_logs:
-            right_column.mount(LogPanel(uuid, logs))
+            right_column.mount(LogPanel(uuid, logs, classes="log-text"))
 
         grid.mount(left_column)
         grid.mount(right_column)
