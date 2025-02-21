@@ -98,7 +98,7 @@ class LogViewerApp(App):
                     formatted_time = timestamp
 
                 # Escape the ']' character in the message
-                message = message.replace("]", "\\]")
+                message = message.replace("]", "\]")
 
                 formatted_logs.append(f"{formatted_time} {message}")
         return "\n".join(formatted_logs)
