@@ -20,8 +20,11 @@ class LogPanel(Static):
     def render(self) -> str:
         header = f"[bold]{self.uuid[:8]}[/bold]\n"
         body = ""
-        # Show the last 4 log entries
-        for timestamp, message in self.logs[-4:]:
+        # Show the last 4 log entries, excluding "Forward complete" messages
+        filtered_logs = [
+            (ts, msg) for ts, msg in self.logs if "Forward complete" not in msg
+        ]
+        for timestamp, message in filtered_logs[-4:]:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 formatted_time = dt.strftime("%H:%M:%S")
