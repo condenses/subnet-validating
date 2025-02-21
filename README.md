@@ -96,3 +96,10 @@ python condenses_validating/log_viewer.py
 ```
 
 ![log-viewer](assets/log-viewer.png)
+
+## Related Repositories
+
+- [Subnet Node Managing](https://github.com/condenses/subnet-node-managing)
+- [Text Compress Scoring](https://github.com/condenses/text-compress-scoring)
+- [Restful Bittensor](https://github.com/condenses/restful-bittensor)
+- [Subnet Synthesizing](https://github.com/condenses/subnet-synthesizing)
