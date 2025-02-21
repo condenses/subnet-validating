@@ -1,223 +1,114 @@
-import asyncio
-from redis.asyncio import Redis
-from datetime import datetime, timedelta
-import argparse
-from typing import Optional, List, Tuple, Dict
 from rich.console import Console
 from rich.panel import Panel
-from rich.layout import Layout
-from rich.live import Live
+from rich.table import Table
 from rich.text import Text
-from rich.box import ROUNDED
-from rich.columns import Columns
+from rich.layout import Layout
 from rich.style import Style
-from rich import box
-from collections import defaultdict
-
-console = Console()
-
-
-class LogCard:
-    def __init__(self, uuid: str, max_logs: int = 5):
-        self.uuid = uuid
-        self.max_logs = max_logs
-        self.logs: List[Tuple[datetime, str]] = []
-
-    def add_log(self, timestamp: datetime, message: str) -> None:
-        self.logs.append((timestamp, message))
-        self.logs.sort(key=lambda x: x[0])
-        if len(self.logs) > self.max_logs:
-            self.logs = self.logs[-self.max_logs :]
-
-    def create_panel(self) -> Panel:
-        """Create a panel representing this log card."""
-        content = Text()
-
-        # Add UUID header
-        content.append(f"UUID: {self.uuid}\n", style="bold magenta")
-        content.append("─" * 40 + "\n", style="grey50")
-
-        # Add logs
-        if not self.logs:
-            content.append("No recent logs", style="italic grey70")
-        else:
-            for timestamp, message in self.logs:
-                time_str = timestamp.strftime("%H:%M:%S")
-                content.append(time_str, style="cyan")
-                content.append(" | ", style="grey50")
-                content.append(f"{message}\n", style="bright_white")
-
-        return Panel(
-            content,
-            box=box.ROUNDED,
-            title=f"[bold blue]Log Stream",
-            border_style="blue",
-            width=50,
-            height=10,
-            padding=(0, 1),
-        )
+from datetime import datetime
+from typing import List, Dict, Any
 
 
 class LogViewer:
-    def __init__(
-        self,
-        redis_client: Redis,
-        follow: bool = False,
-        last_minutes: int = 60,
-        last_n_logs: int = 5,
-        cards_per_row: int = 3,
-    ):
-        self.redis = redis_client
-        self.follow = follow
-        self.last_minutes = last_minutes
-        self.last_n_logs = last_n_logs
-        self.cards_per_row = cards_per_row
-        self.layout = self._create_layout()
-        self.log_cards: Dict[str, LogCard] = {}
+    def __init__(self):
+        self.console = Console()
 
-    def _create_layout(self) -> Layout:
-        """Create the main layout for the log viewer."""
+    def create_log_card(self, log_entry: Dict[str, Any]) -> Panel:
+        """Create a pretty panel for a single log entry."""
+        # Create a table for log details
+        table = Table(show_header=False, show_edge=False, box=None)
+        table.add_column("Key", style="bold cyan")
+        table.add_column("Value")
+
+        # Format timestamp if present
+        timestamp = log_entry.get("timestamp")
+        if timestamp:
+            if isinstance(timestamp, (int, float)):
+                timestamp = datetime.fromtimestamp(timestamp).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
+            table.add_row("Time", timestamp)
+
+        # Add other log fields
+        for key, value in log_entry.items():
+            if key != "timestamp":
+                # Format value based on type
+                if isinstance(value, (dict, list)):
+                    formatted_value = Text(str(value), style="yellow")
+                elif isinstance(value, bool):
+                    formatted_value = Text(
+                        str(value), style="green" if value else "red"
+                    )
+                elif isinstance(value, (int, float)):
+                    formatted_value = Text(str(value), style="blue")
+                else:
+                    formatted_value = Text(str(value))
+
+                table.add_row(key.capitalize(), formatted_value)
+
+        # Create panel with border style based on log level
+        level = log_entry.get("level", "").lower()
+        border_style = {
+            "error": "red",
+            "warning": "yellow",
+            "info": "blue",
+            "debug": "grey70",
+        }.get(level, "white")
+
+        return Panel(
+            table,
+            title=f"[{level.upper()}]" if level else "",
+            border_style=border_style,
+            padding=(1, 2),
+        )
+
+    def display_logs(self, logs: List[Dict[str, Any]]) -> None:
+        """Display multiple log entries as cards."""
+        # Clear screen first
+        self.console.clear()
+
+        # Create layout
         layout = Layout()
-        layout.split_column(
-            Layout(name="header", size=3),
-            Layout(name="main"),
-            Layout(name="footer", size=3),
+        layout.split_column(Layout(name="header", size=3), Layout(name="main"))
+
+        # Add header
+        header = Panel(
+            Text("Log Viewer", style="bold white", justify="center"), style="blue"
         )
-        return layout
+        layout["header"].update(header)
 
-    def _create_header(self) -> Panel:
-        """Create the header panel with viewing information."""
-        title = f"Redis Log Dashboard - Showing last {self.last_minutes} minutes"
-        subtitle = f"Monitoring {len(self.log_cards)} active log streams"
-
-        header_text = Text()
-        header_text.append(title + "\n", style="bold white on blue")
-        header_text.append(subtitle, style="italic")
-
-        return Panel(header_text, box=ROUNDED, style="blue", padding=(0, 2))
-
-    def _create_footer(self) -> Panel:
-        """Create the footer panel with controls information."""
-        footer_text = Text()
-        footer_text.append("Press ", style="grey70")
-        footer_text.append("Ctrl+C", style="bold red")
-        footer_text.append(" to exit", style="grey70")
-        if self.follow:
-            footer_text.append(" | Following new logs", style="green")
-
-        return Panel(footer_text, box=ROUNDED, style="blue")
-
-    async def _fetch_logs(self) -> None:
-        """Fetch and process logs from Redis."""
-        cutoff_time = datetime.now() - timedelta(minutes=self.last_minutes)
-
-        # Get all log keys
-        async for key in self.redis.scan_iter("log:*"):
-            uuid = key.decode().replace("log:", "")
-
-            # Create card if it doesn't exist
-            if uuid not in self.log_cards:
-                self.log_cards[uuid] = LogCard(uuid, self.last_n_logs)
-
-            # Get logs for this UUID
-            logs = await self.redis.hgetall(key.decode())
-            if logs:
-                for ts_bytes, msg_bytes in logs.items():
-                    timestamp = datetime.fromisoformat(ts_bytes.decode())
-                    if timestamp >= cutoff_time:
-                        message = msg_bytes.decode()
-                        self.log_cards[uuid].add_log(timestamp, message)
-
-    def _create_card_grid(self) -> Columns:
-        """Create a grid of cards using Columns."""
-        # Create panels for each card
-        panels = [card.create_panel() for card in self.log_cards.values()]
-
-        # Split panels into rows
-        rows = []
-        for i in range(0, len(panels), self.cards_per_row):
-            row_panels = panels[i : i + self.cards_per_row]
-            rows.append(Columns(row_panels, equal=True, align="center"))
-
-        # Combine all rows into a single Text object
-        grid = Text()
-        for row in rows:
-            grid.append("\n")
-            grid.append(row)
-
-        return grid
-
-    async def update_display(self, live: Live) -> None:
-        """Update the display with fresh log data."""
-        await self._fetch_logs()
-
-        # Update layout components
-        self.layout["header"].update(self._create_header())
-        self.layout["main"].update(self._create_card_grid())
-        self.layout["footer"].update(self._create_footer())
-
-        live.update(self.layout)
-
-    async def run(self) -> None:
-        """Run the log viewer."""
-        with Live(
-            self.layout, console=console, screen=True, refresh_per_second=4
-        ) as live:
-            try:
-                while True:
-                    await self.update_display(live)
-                    if not self.follow:
-                        break
-                    await asyncio.sleep(1)
-            except KeyboardInterrupt:
-                pass
+        # Display each log as a card
+        for log in logs:
+            self.console.print(self.create_log_card(log))
+            # Add small spacing between cards
+            self.console.print()
 
 
-async def main():
-    parser = argparse.ArgumentParser(description="Redis Log Dashboard")
-    parser.add_argument("--host", default="localhost", help="Redis host")
-    parser.add_argument("--port", type=int, default=6379, help="Redis port")
-    parser.add_argument(
-        "--follow", "-f", action="store_true", help="Continuously watch for new logs"
-    )
-    parser.add_argument(
-        "--minutes", "-m", type=int, default=60, help="Show logs from last N minutes"
-    )
-    parser.add_argument(
-        "--last-n",
-        "-n",
-        type=int,
-        default=5,
-        help="Number of most recent logs to show per card",
-    )
-    parser.add_argument(
-        "--cards-per-row",
-        "-c",
-        type=int,
-        default=3,
-        help="Number of cards to show per row",
-    )
-
-    args = parser.parse_args()
-
-    redis = Redis(
-        host=args.host,
-        port=args.port,
-        decode_responses=False,  # Keep as bytes for consistent handling
-    )
-
-    try:
-        viewer = LogViewer(
-            redis,
-            follow=args.follow,
-            last_minutes=args.minutes,
-            last_n_logs=args.last_n,
-            cards_per_row=args.cards_per_row,
-        )
-        await viewer.run()
-    finally:
-        await redis.close()
-
-
+# Example usage
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Sample logs for demonstration
+    sample_logs = [
+        {
+            "timestamp": datetime.now().timestamp(),
+            "level": "info",
+            "message": "Application started",
+            "details": {"version": "1.0.0", "environment": "production"},
+        },
+        {
+            "timestamp": datetime.now().timestamp(),
+            "level": "error",
+            "message": "Failed to connect to database",
+            "error_code": 500,
+            "retry_count": 3,
+        },
+        {
+            "timestamp": datetime.now().timestamp(),
+            "level": "warning",
+            "message": "High memory usage detected",
+            "memory_usage": "85%",
+            "threshold": "80%",
+        },
+    ]
+
+    # Create and use the log viewer
+    viewer = LogViewer()
+    viewer.display_logs(sample_logs)
