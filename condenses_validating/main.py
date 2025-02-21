@@ -125,13 +125,17 @@ class ValidatorCore:
         forward_uuid = str(uuid.uuid4())
         async with self.forward_log as log:
             await log.add_log(forward_uuid, "Starting forward pass")
-            uids = await self.orchestrator.consume_rate_limits(
-                uid=None,
-                top_fraction=1.0,
-                count=CONFIG.validating.batch_size,
-                acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
-                timeout=12,
-            )
+            try:
+                uids = await self.orchestrator.consume_rate_limits(
+                    uid=None,
+                    top_fraction=1.0,
+                    count=CONFIG.validating.batch_size,
+                    acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
+                    timeout=12,
+                )
+            except Exception as e:
+                await log.add_log(forward_uuid, f"Error in consuming rate limits: {e}")
+                return
             try:
                 synthetic_synapse = await self.get_synthetic()
             except Exception as e:
@@ -145,14 +149,18 @@ class ValidatorCore:
                 return
             await log.add_log(forward_uuid, f"Got {len(axons)} axons")
 
-            forward_synapse = TextCompressProtocol(
-                context=synthetic_synapse.user_message
-            )
-            responses = await self.dendrite.forward(
-                axons=axons,
-                synapse=forward_synapse,
-                timeout=12,
-            )
+            try:
+                forward_synapse = TextCompressProtocol(
+                    context=synthetic_synapse.user_message
+                )
+                responses = await self.dendrite.forward(
+                    axons=axons,
+                    synapse=forward_synapse,
+                    timeout=12,
+                )
+            except Exception as e:
+                await log.add_log(forward_uuid, f"Error in forwarding: {e}")
+                return
             await log.add_log(forward_uuid, f"Received {len(responses)} responses")
             try:
                 uids, scores = await self.scoring_manager.get_scores(
@@ -166,12 +174,15 @@ class ValidatorCore:
                 await log.add_log(forward_uuid, f"Error in scoring: {e}")
                 return
             await log.add_log(forward_uuid, f"Scored {len(scores)} responses")
-
-            futures = [
-                self.orchestrator.update_stats(uid=uid, new_score=score)
-                for uid, score in zip(uids, scores)
-            ]
-            await asyncio.gather(*futures)
+            try:
+                futures = [
+                    self.orchestrator.update_stats(uid=uid, new_score=score)
+                    for uid, score in zip(uids, scores)
+                ]
+                await asyncio.gather(*futures)
+            except Exception as e:
+                await log.add_log(forward_uuid, f"Error in updating stats: {e}")
+                return
             await log.add_log(forward_uuid, "✓ Forward complete")
 
     async def run(self) -> None:
