@@ -19,8 +19,8 @@ class LogPanel(Static):
     def render(self) -> str:
         header = f"[bold]{self.uuid[:8]}[/bold]\n"
         body = ""
-        # Show the last 6 log entries
-        for timestamp, message in self.logs[-6:]:
+        # Show the last 4 log entries
+        for timestamp, message in self.logs[-4:]:
             try:
                 dt = datetime.fromisoformat(timestamp)
                 formatted_time = dt.strftime("%H:%M:%S")
@@ -95,9 +95,9 @@ class TextualLogViewer(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        # Configure the grid with 5 columns - first for set_weights, rest for other logs
+        # Configure the grid with 4 columns - first for set_weights, rest for other logs
         grid = self.query_one("#logs-grid", Grid)
-        grid.styles.grid_template_columns = "1fr repeat(3, 1fr)"
+        grid.styles.grid_template_columns = "1fr repeat(2, 1fr)"  # Changed to 3 columns total (1 for set_weights, 2 for others)
         # Refresh the logs every 2 seconds.
         self.set_interval(2, self.refresh_logs)
 
