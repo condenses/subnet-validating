@@ -12,6 +12,7 @@ pip install uv
 uv venv
 . .venv/bin/activate
 uv sync --prerelease=allow
+. scripts/install_redis.sh
 ```
 
 ## Quick Start
