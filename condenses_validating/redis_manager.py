@@ -45,3 +45,30 @@ class RedisManager:
         logs = await self.redis.hgetall(log_key)
         # Since decode_responses=True, the values are already decoded
         return [(ts, msg) for ts, msg in logs.items()]
+
+    async def get_latest_logs(self, n: int = 5) -> list[tuple[str, str, str]]:
+        """Get the latest n logs across all UUIDs."""
+        all_logs = []
+        async for key in self.redis.scan_iter("log:*"):
+            uuid = key.split(":")[1]
+            logs = await self.get_logs(uuid)
+            for timestamp, message in logs:
+                all_logs.append((uuid, timestamp, message))
+
+        # Sort by timestamp and get the latest n
+        all_logs.sort(key=lambda x: datetime.fromisoformat(x[1]), reverse=True)
+        return all_logs[:n]
+
+    async def search_logs(self, search_term: str) -> list[tuple[str, str, str]]:
+        """Search for logs containing the given string."""
+        matching_logs = []
+        async for key in self.redis.scan_iter("log:*"):
+            uuid = key.split(":")[1]
+            logs = await self.get_logs(uuid)
+            for timestamp, message in logs:
+                if search_term.lower() in message.lower():
+                    matching_logs.append((uuid, timestamp, message))
+
+        # Sort by timestamp, most recent first
+        matching_logs.sort(key=lambda x: datetime.fromisoformat(x[1]), reverse=True)
+        return matching_logs
