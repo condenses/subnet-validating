@@ -28,6 +28,13 @@ class ForwardLog:
         self.set_weights_key = "forward_log:set_weights"
         self.lock = Lock()
 
+    async def __aenter__(self):
+        self.live.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        self.live.stop()
+
     async def add_log(self, synapse_id: str, message: str):
         async with self.lock:
             redis_key = f"forward_log:{synapse_id}"
