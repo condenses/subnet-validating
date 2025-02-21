@@ -212,7 +212,7 @@ class ValidatorCore:
                     continue
                 try:
                     result, msg = await self.restful_bittensor.set_weights(
-                        uids=uids, weights=weights
+                        uids=uids, weights=weights, netuid=47, version=99
                     )
                     await log.add_log(
                         "set_weights",
