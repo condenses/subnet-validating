@@ -43,10 +43,11 @@ class LogViewer:
         """Display logs using rich."""
         table = Table(title="Log Viewer")
 
-        table.add_column("UUID", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Timestamp", style="magenta")
-        table.add_column("Message", style="green")
+        table.add_column("Set Weights Logs", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Batch Logs", style="magenta")
 
+        # Left column: "set_weights" logs
+        set_weights_content = []
         for uuid, logs in self.set_weights_logs:
             for timestamp, message in logs:
                 try:
@@ -54,16 +55,26 @@ class LogViewer:
                     formatted_time = dt.strftime("%H:%M:%S")
                 except Exception:
                     formatted_time = timestamp
-                table.add_row(uuid[:8], formatted_time, message)
+                set_weights_content.append(f"{uuid[:8]} {formatted_time} {message}")
 
+        # Right column: Batch logs by UUID
+        batch_logs_content = []
         for uuid, logs in self.regular_logs:
+            batch_logs_content.append(f"--- {uuid[:8]} ---")  # Delimiter for each UUID
             for timestamp, message in logs:
                 try:
                     dt = datetime.fromisoformat(timestamp)
                     formatted_time = dt.strftime("%H:%M:%S")
                 except Exception:
                     formatted_time = timestamp
-                table.add_row(uuid[:8], formatted_time, message)
+                batch_logs_content.append(f"{formatted_time} {message}")
+
+        # Add rows to the table
+        max_length = max(len(set_weights_content), len(batch_logs_content))
+        for i in range(max_length):
+            left = set_weights_content[i] if i < len(set_weights_content) else ""
+            right = batch_logs_content[i] if i < len(batch_logs_content) else ""
+            table.add_row(left, right)
 
         self.console.print(table)
 
