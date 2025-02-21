@@ -68,8 +68,11 @@ class LogViewer:
 
     async def update_display(self, live: Live) -> None:
         """Fetch the latest logs and update the live display."""
-        # Get all log keys using scan_iter (keys are already decoded)
-        log_keys = [key for key in self.redis_client.scan_iter("log:*")]
+        log_keys = []
+        # Use async for to iterate over the async generator
+        async for key in self.redis_client.scan_iter("log:*"):
+            log_keys.append(key)
+
         # Select the most recent keys based on our grid limit
         recent_keys = log_keys[-self.max_cards :]
         uuids = []
