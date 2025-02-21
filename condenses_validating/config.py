@@ -11,24 +11,6 @@ class RedisConfig(BaseModel):
     password: Optional[str] = None
 
 
-class MongoConfig(BaseModel):
-    host: str = "localhost"
-    port: int = 27017
-    username: Optional[str] = None
-    password: Optional[str] = None
-    uri: Optional[str] = None
-
-    database: str = "condenses"
-    collection: str = "miner_stats"
-
-    def get_uri(self) -> str:
-        if self.uri:
-            return self.uri
-        if self.username and self.password:
-            return f"mongodb://{self.username}:{self.password}@{self.host}:{self.port}"
-        return f"mongodb://{self.host}:{self.port}"
-
-
 class ServerConfig(BaseModel):
     port: int = 9101
     host: str = "0.0.0.0"
@@ -73,7 +55,6 @@ class WalletConfig(BaseModel):
 
 class Settings(BaseSettings):
     redis: RedisConfig = RedisConfig()
-    mongo: MongoConfig = MongoConfig()
     server: ServerConfig = ServerConfig()
     validating: ValidatingConfig = ValidatingConfig()
     wallet: WalletConfig = WalletConfig()
@@ -85,6 +66,7 @@ class Settings(BaseSettings):
     class Config:
         env_nested_delimiter = "__"
         env_file = ".env"
+        extra = "allow"
 
 
 CONFIG = Settings()
