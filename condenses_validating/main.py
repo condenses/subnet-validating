@@ -138,8 +138,11 @@ class ValidatorCore:
                 await log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
                 return
             await log.add_log(forward_uuid, f"Processing UIDs: {uids}")
-
-            axons = await self.get_axons(uids)
+            try:
+                axons = await self.get_axons(uids)
+            except Exception as e:
+                await log.add_log(forward_uuid, f"Error in getting axons: {e}")
+                return
             await log.add_log(forward_uuid, f"Got {len(axons)} axons")
 
             forward_synapse = TextCompressProtocol(
