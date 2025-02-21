@@ -208,6 +208,7 @@ class ValidatorCore:
                     )
                 except Exception as e:
                     await log.add_log("set_weights", f"Error in getting weights: {e}")
+                    await asyncio.sleep(60)
                     continue
                 try:
                     result, msg = await self.restful_bittensor.set_weights(
@@ -223,6 +224,7 @@ class ValidatorCore:
                     )
                 except Exception as e:
                     await log.add_log("set_weights", f"Error in setting weights: {e}")
+                    await asyncio.sleep(60)
                     continue
             await asyncio.sleep(60)
 
