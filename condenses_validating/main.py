@@ -120,6 +120,8 @@ class ValidatorCore:
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
+        self.animation_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+        self.animation_idx = 0
         logger.success("ValidatorCore initialization complete")
 
     async def get_synthetic(self) -> TextCompressProtocol:
@@ -212,6 +214,7 @@ class ValidatorCore:
         await self.redis_manager.flush_db()
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
+        asyncio.create_task(self.animate_progress())
 
         while not self.should_exit:
             try:
@@ -243,6 +246,14 @@ class ValidatorCore:
             except Exception as e:
                 logger.error(f"Weight update error: {e}")
             await asyncio.sleep(60)
+
+    async def animate_progress(self):
+        """Displays an animation to indicate the validator is running"""
+        while not self.should_exit:
+            animation_char = self.animation_chars[self.animation_idx]
+            print(f"\r{animation_char} Validator running...", end="", flush=True)
+            self.animation_idx = (self.animation_idx + 1) % len(self.animation_chars)
+            await asyncio.sleep(0.1)
 
 
 def start_loop():

@@ -40,32 +40,35 @@ class TextualLogViewer(App):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Connect asynchronously to Redis (adjust host/port/db as needed)
         self.redis = aioredis.Redis(
             host="localhost", port=6379, db=0, decode_responses=True
         )
-        self.max_panels = 16  # Maximum log panels to display
+        self.max_panels = 12  # Reduced to account for the dedicated column
+        self.set_weights_logs = []  # Store set_weights logs separately
 
     async def fetch_logs(self) -> List[Tuple[str, List[Tuple[str, str]]]]:
-        """Retrieve log data from Redis.
-
-        Looks for keys matching 'log:*', extracts the UUID, and sorts
-        the log entries (assumed stored as hash fields: timestamp => message).
-        """
+        """Retrieve log data from Redis."""
         uuids_with_logs = []
         keys = []
+        self.set_weights_logs = []  # Reset set_weights logs
+
         async for key in self.redis.scan_iter("log:*"):
-            keys.append(key)
-        # Only use the most recent keys up to our grid limit
-        recent_keys = keys[-self.max_panels :]
-        for key in recent_keys:
             parts = key.split(":")
             if len(parts) < 2:
                 continue
             uuid = parts[1]
             logs_dict = await self.redis.hgetall(key)
             logs = sorted(logs_dict.items(), key=lambda x: x[0])
-            uuids_with_logs.append((uuid, logs))
+
+            if "set_weights" in uuid:
+                self.set_weights_logs.append((uuid, logs))
+            else:
+                keys.append((key, uuid, logs))
+
+        # Only use the most recent non-set_weights keys up to our grid limit
+        recent_keys = sorted(keys, key=lambda x: x[0])[-self.max_panels :]
+        uuids_with_logs = [(uuid, logs) for _, uuid, logs in recent_keys]
+
         return uuids_with_logs
 
     async def refresh_logs(self) -> None:
@@ -77,7 +80,11 @@ class TextualLogViewer(App):
         for child in grid.children:
             child.remove()
 
-        # Mount new panels
+        # Mount set_weights panels in the first column
+        for uuid, logs in self.set_weights_logs[-3:]:  # Show last 3 set_weights logs
+            grid.mount(LogPanel(uuid, logs))
+
+        # Mount other panels in remaining columns
         for uuid, logs in logs_data:
             grid.mount(LogPanel(uuid, logs))
 
@@ -88,9 +95,9 @@ class TextualLogViewer(App):
         yield Footer()
 
     async def on_mount(self) -> None:
-        # Configure the grid to have 4 equal columns.
+        # Configure the grid with 5 columns - first for set_weights, rest for other logs
         grid = self.query_one("#logs-grid", Grid)
-        grid.styles.grid_template_columns = "repeat(4, 1fr)"
+        grid.styles.grid_template_columns = "1fr repeat(3, 1fr)"
         # Refresh the logs every 2 seconds.
         self.set_interval(2, self.refresh_logs)
 
