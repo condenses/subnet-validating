@@ -98,10 +98,9 @@ class LogViewerApp(App):
                 except ValueError:
                     formatted_time = timestamp
 
-                # jsonize the message
-                message = json.loads(message)
+                escaped_message = message.replace("[", "\\[").replace("]", "\\]")
 
-                formatted_logs.append(f"{formatted_time} {message}")
+                formatted_logs.append(f"{formatted_time} {escaped_message}")
         return "\n".join(formatted_logs)
 
     async def update_logs(self):
