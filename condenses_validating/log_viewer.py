@@ -83,11 +83,11 @@ class TextualLogViewer(App):
 
     async def on_mount(self) -> None:
         """Set up the layout and start the periodic refresh."""
-        await self.view.dock(Header(), edge="top")
-        await self.view.dock(Footer(), edge="bottom")
+        await self.screen.dock(Header(), edge="top")
+        await self.screen.dock(Footer(), edge="bottom")
         # Configure grid: 4 columns (adjust grid as needed)
         self.grid.styles.grid_template_columns = "repeat(4, 1fr)"
-        await self.view.dock(self.grid, edge="left", size=100)
+        await self.screen.dock(self.grid, edge="left", size=100)
         # Refresh logs every 2 seconds
         self.set_interval(2, self.refresh_logs)
 
