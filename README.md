@@ -41,7 +41,7 @@ echo "VLLM_CONFIG__MODEL_NAME=chat-llama-3-1-70b" >> .env
 
 ### 2. Synthesizing
 
-To start the synthesizing service, run:
+**Role**: Serve an endpoint that can synthesize the user message from public dataset.
 
 ```bash
 echo "HF_TOKEN=your_huggingface_token" >> .synthesizing.env
@@ -50,7 +50,7 @@ pm2 start --name "synthesizing" "gunicorn condenses_synthesizing.server:app --wo
 
 ### 3. Node Managing
 
-To start the node managing service, run:
+**Role**: Manage credit & "validator -> miner" rate limit. Orchestrating UIDs for synthetic validation.
 
 ```bash
 pm2 start --name "node_managing" "gunicorn condenses_node_managing.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9101"
@@ -58,7 +58,7 @@ pm2 start --name "node_managing" "gunicorn condenses_node_managing.server:app --
 
 ### 4. Scoring
 
-Set the environment variables and start the scoring service:
+**Role**: Receive original message and compressed messages, run scoring algorithm and return the score.
 
 ```bash
 pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9102"
@@ -66,7 +66,7 @@ pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-c
 
 ### 5. Restful Bittensor
 
-Set the environment variables and start the restful bittensor service:
+**Role**: Dedicated process for auto-sync metagraph and chain functions: get-axon, set-weights, get-chain data
 
 ```bash
 echo "WALLET_NAME=default" >> .env
@@ -77,7 +77,7 @@ pm2 start --name "restful_bittensor" "gunicorn restful_bittensor.server:app --wo
 
 ### 6. Validating
 
-Set the environment variables and start the validating service:
+**Role**: Main process that orchestrates the validating process.
 
 ```bash
 echo "SYNTHESIZING__BASE_URL=http://localhost:9100" >> .env
@@ -89,7 +89,7 @@ pm2 start --name "validating" "condenses-validating"
 
 ### 7. Log Viewer
 
-To view logs, run the following command:
+**Role**: A console frontend to view the logs of the validating process. It helps to differentiate the logs from: `set_weights|running_logs|finished_logs`
 
 ```bash
 python condenses_validating/log_viewer.py
