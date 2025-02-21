@@ -89,13 +89,17 @@ class LogViewerApp(App):
         """Format logs for display."""
         formatted_logs = []
         for uuid, log_entries in logs:
-            formatted_logs.append(f"--- {uuid[:8]} ---")
+            formatted_logs.append(f"--- {uuid[:16]} ---")
             for timestamp, message in log_entries:
                 try:
                     dt = datetime.fromisoformat(timestamp)
                     formatted_time = dt.strftime("%H:%M:%S")
                 except ValueError:
                     formatted_time = timestamp
+
+                # Escape the ']' character in the message
+                message = message.replace("]", "\\]")
+
                 formatted_logs.append(f"{formatted_time} {message}")
         return "\n".join(formatted_logs)
 
