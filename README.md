@@ -30,7 +30,7 @@ export HF_TOKEN=your_huggingface_token
 
 ```bash
 echo "HF_TOKEN=your_huggingface_token" >> .synthesizing.env
-pm2 start python --name "synthesizing" -- -m uvicorn condenses_synthesizing.server:app --host localhost --port 9100
+pm2 start python --name "synthesizing" -- -m uvicorn condenses_synthesizing.server:app --host 127.0.0.1 --port 9100
 ```
 
 3. Node Managing
@@ -38,7 +38,7 @@ pm2 start python --name "synthesizing" -- -m uvicorn condenses_synthesizing.serv
 - Run:
 
 ```bash
-pm2 start python --name "node_managing" -m uvicorn condenses_node_managing.server:app --host localhost --port 9101
+pm2 start python --name "node_managing" -- -m uvicorn condenses_node_managing.server:app --host 127.0.0.1 --port 9101
 ```
 
 4. Scoring
@@ -52,13 +52,13 @@ echo "VLLM__BASE_URL=http://localhost:8000" >> .env
 - Run:
 
 ```bash
-pm2 start python --name "scoring" -m uvicorn text_compress_scoring.server:app --host localhost --port 9102
+pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app --host 127.0.0.1 --port 9102
 ```
 
 5. Restful Bittensor
 
 ```bash
-pm2 start python --name "restful_bittensor" -m uvicorn restful_bittensor.server:app --host localhost --port 9103
+pm2 start python --name "restful_bittensor" -- -m uvicorn restful_bittensor.server:app --host 127.0.0.1 --port 9103
 ```
 
 6. Validating
