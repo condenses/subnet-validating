@@ -44,3 +44,4 @@ Repository = "https://github.com/yourusername/restful-bittensor.git"
 
 [project.scripts]
 condenses-validating = "condenses_validating.main:start_loop"
+condenses-validating-log-viewer = "condenses_validating.log_viewer:start_viewer"
