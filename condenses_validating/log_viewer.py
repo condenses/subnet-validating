@@ -67,6 +67,11 @@ class LogViewerApp(App):
             else:
                 self.regular_logs.append((uuid, logs))
 
+        # Sort regular_logs by the latest timestamp in each log entry
+        self.regular_logs = deque(
+            sorted(self.regular_logs, key=lambda x: x[1][-1][0], reverse=True), maxlen=6
+        )
+
     def format_logs(self, logs):
         """Format logs for display."""
         formatted_logs = []
