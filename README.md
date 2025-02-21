@@ -29,6 +29,7 @@ You can choose between self-hosted LLM inference or using the free LLM Inference
 ```bash
 export HF_TOKEN=your_huggingface_token
 ./scripts/install_vllm.sh
+echo "VLLM__BASE_URL=http://localhost:8000" >> .env # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
 ```
 
 #### 1.2 Free LLM Inference from Subnet 19 - Nineteen
@@ -60,7 +61,6 @@ pm2 start --name "node_managing" "gunicorn condenses_node_managing.server:app --
 Set the environment variables and start the scoring service:
 
 ```bash
-echo "VLLM__BASE_URL=http://localhost:8000" >> .env
 pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9102"
 ```
 
