@@ -197,7 +197,9 @@ class ValidatorCore:
                 last_update = await self.restful_bittensor.get_last_update()
                 await log.add_log("set_weights", f"last_update: {last_update}")
                 uids, weights = await self.orchestrator.get_score_weights()
-                await log.add_log("set_weights", f"uids: {uids[:10]}...\nweights: {weights[:10]}...")
+                await log.add_log(
+                    "set_weights", f"uids: {uids[:10]}...\nweights: {weights[:10]}..."
+                )
             result, msg = await self.restful_bittensor.set_weights(
                 uids=uids, weights=weights
             )
