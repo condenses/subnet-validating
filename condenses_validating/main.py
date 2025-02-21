@@ -103,7 +103,7 @@ class ValidatorCore:
             redis_client=self.redis_client,
             max_columns=CONFIG.validating.max_log_columns,
             ttl=CONFIG.validating.log_ttl,
-            panel_width=CONFIG.validating.panel_width
+            panel_width=CONFIG.validating.panel_width,
         )
 
         self.wallet = bt.wallet(
@@ -138,12 +138,16 @@ class ValidatorCore:
                 timeout=12,
             )
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in consuming rate limits: {e}")
+            await self.forward_log.add_log(
+                forward_uuid, f"Error in consuming rate limits: {e}"
+            )
             return
         try:
             synthetic_synapse = await self.get_synthetic()
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in getting synthetic: {e}")
+            await self.forward_log.add_log(
+                forward_uuid, f"Error in getting synthetic: {e}"
+            )
             return
         await self.forward_log.add_log(forward_uuid, f"Processing UIDs: {uids}")
         try:
@@ -165,7 +169,9 @@ class ValidatorCore:
         except Exception as e:
             await self.forward_log.add_log(forward_uuid, f"Error in forwarding: {e}")
             return
-        await self.forward_log.add_log(forward_uuid, f"Received {len(responses)} responses")
+        await self.forward_log.add_log(
+            forward_uuid, f"Received {len(responses)} responses"
+        )
         try:
             uids, scores = await self.scoring_manager.get_scores(
                 responses=responses,
@@ -185,7 +191,9 @@ class ValidatorCore:
             ]
             await asyncio.gather(*futures)
         except Exception as e:
-            await self.forward_log.add_log(forward_uuid, f"Error in updating stats: {e}")
+            await self.forward_log.add_log(
+                forward_uuid, f"Error in updating stats: {e}"
+            )
             return
         await self.forward_log.add_log(forward_uuid, "✓ Forward complete")
 
@@ -196,11 +204,12 @@ class ValidatorCore:
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
 
-        async with self.forward_log.live:
+        async with self.forward_log:
             while not self.should_exit:
                 try:
                     concurrent_forwards = [
-                        self.forward() for _ in range(CONFIG.validating.concurrent_forward)
+                        self.forward()
+                        for _ in range(CONFIG.validating.concurrent_forward)
                     ]
                     await asyncio.gather(*concurrent_forwards)
                     await asyncio.sleep(8)
@@ -222,7 +231,7 @@ class ValidatorCore:
                     "set_weights",
                     f"Updated weights at {datetime.now()}\n"
                     f"Top UIDs: {uids[:5]}\n"
-                    f"Top Weights: {weights[:5]}"
+                    f"Top Weights: {weights[:5]}",
                 )
             except Exception as e:
                 logger.error(f"Weight update error: {e}")
