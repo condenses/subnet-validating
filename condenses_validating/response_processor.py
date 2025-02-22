@@ -2,12 +2,18 @@ from .protocol import TextCompressProtocol
 from typing import List, Tuple
 from loguru import logger
 import tiktoken
+from .config import CONFIG
 
 
 class ResponseProcessor:
     """Handles processing and validation of miner responses"""
 
     encoding = tiktoken.encoding_for_model("gpt-4o")
+
+    def get_compress_rate(self, response: TextCompressProtocol) -> float:
+        original_tokens = self.encoding.encode(response.user_message)
+        compressed_tokens = self.encoding.encode(response.compressed_context)
+        return len(compressed_tokens) / len(original_tokens)
 
     async def validate_responses(
         self,
@@ -22,13 +28,14 @@ class ResponseProcessor:
         invalid = []
 
         for uid, response in zip(uids, responses):
-            if response and response.is_success and response.verify():
+            if (
+                response
+                and response.is_success
+                and response.verify()
+                and self.get_compress_rate(response)
+                < CONFIG.validating.max_compress_rate
+            ):
                 valid.append((uid, response))
-                original_tokens = self.encoding.encode(
-                    ground_truth_synapse.user_message
-                )
-                compressed_tokens = self.encoding.encode(response.compressed_context)
-                compress_rate = len(compressed_tokens) / len(original_tokens)
             else:
                 invalid_reason = ""
                 if not response:
@@ -37,6 +44,11 @@ class ResponseProcessor:
                     invalid_reason = "not_successful"
                 elif not response.verify():
                     invalid_reason = "verification_failed"
+                elif (
+                    self.get_compress_rate(response)
+                    > CONFIG.validating.max_compress_rate
+                ):
+                    invalid_reason = "compress_rate_too_high"
 
                 invalid.append((uid, response, invalid_reason))
         return valid, invalid
