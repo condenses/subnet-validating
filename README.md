@@ -3,6 +3,20 @@
   <h1 align="center">condenses-validating</h1>
   <h4 align="center"> Orchestrating validating process that connects with other condenses services</div>
 
+$$
+S_i = 0.7r_i + 0.2r_ic_i + 0.1r_id_i
+$$
+
+The weights in the formula are:
+- 70% weight on the raw - llm preference score
+- 20% weight on the compression rate's contribution
+- 10% weight on the differentiation score's contribution
+
+The compression rate and differentiation score act as multipliers that can boost the raw score, where:
+- $c_i \in [0,1]$ represents how well the text was compressed
+- $d_i \in [0,1]$ represents how unique/different the response is from others
+
+
 ## Installation
 
 To install the necessary components, run the following commands:

@@ -15,7 +15,7 @@ def SCORE_ENSEMBLE(
     differentiate_scores: list[float],
 ) -> list[float]:
     return [
-        score * 0.7 + compress_rate * 0.2 + differentiate_score * 0.1
+        score * 0.7 + (compress_rate * 0.2 + differentiate_score * 0.1) * score
         for score, compress_rate, differentiate_score in zip(
             raw_scores, compress_rates, differentiate_scores
         )
