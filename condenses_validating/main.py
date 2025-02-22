@@ -17,97 +17,7 @@ from datetime import datetime
 from pydantic import BaseModel
 import httpx
 from .secured_headers import get_headers
-
-
-class ScoringBatchLog(BaseModel):
-    uids: list[int]
-    scores: list[float]
-    compressed_user_messages: list[str]
-    original_user_message: str
-    forward_uuid: str
-
-
-class ScoringManager:
-    def __init__(self, scoring_client: AsyncScoringClient, redis_manager: RedisManager):
-        self.scoring_client = scoring_client
-        self.redis_manager = redis_manager
-        self.response_processor = ResponseProcessor()
-        logger.info("ScoringManager initialized")
-
-    async def get_scores(
-        self,
-        responses: list[TextCompressProtocol],
-        synthetic_synapse: TextCompressProtocol,
-        uids: list[int],
-        forward_uuid: str,
-    ) -> tuple[list[int], list[float]]:
-        await self.redis_manager.add_log(
-            forward_uuid, f"Processing responses from {len(uids)} UIDs"
-        )
-        valid, invalid = await self.response_processor.validate_responses(
-            uids, responses, synthetic_synapse
-        )
-
-        invalid_uids = [uid for uid, _, _ in invalid]
-        invalid_scores = [0] * len(invalid)
-        valid_uids = [uid for uid, _ in valid]
-        valid_responses = [response for _, response in valid]
-
-        if not valid_uids:
-            await self.redis_manager.add_log(
-                forward_uuid, "Warning: No valid responses received"
-            )
-            return invalid_uids, invalid_scores
-
-        await self.redis_manager.add_log(
-            forward_uuid, f"Validating {len(valid_uids)} UIDs"
-        )
-        scored_counter = await self.redis_manager.get_scored_counter()
-        valid_uids_to_score = [
-            uid
-            for uid in valid_uids
-            if scored_counter.get(uid, 0)
-            < CONFIG.validating.scoring_rate.max_scoring_count
-        ]
-
-        if valid_uids_to_score:
-            await self.redis_manager.add_log(
-                forward_uuid, f"Scoring {len(valid_uids_to_score)} UIDs"
-            )
-            original_user_message = synthetic_synapse.user_message
-            valid_scores = await self.scoring_client.score_batch(
-                original_user_message=original_user_message,
-                batch_compressed_user_messages=[
-                    response.compressed_context for response in valid_responses
-                ],
-                timeout=360,
-            )
-            await self.redis_manager.add_log(
-                forward_uuid, f"Received scores: {valid_scores}"
-            )
-            valid_scores = [
-                score * 0.8 + (1 - valid_responses.compress_rate) * 0.2
-                for score, valid_responses in zip(valid_scores, valid_responses)
-            ]
-            await self.redis_manager.update_scoring_records(valid_uids_to_score, CONFIG)
-            await self.redis_manager.add_log(
-                forward_uuid, "Updated scoring records in Redis"
-            )
-        else:
-            await self.redis_manager.add_log(
-                forward_uuid, "Warning: No UIDs eligible for scoring"
-            )
-            valid_uids = []
-            valid_scores = []
-
-        final_uids = invalid_uids + valid_uids
-        final_scores = invalid_scores + valid_scores
-
-        await self.redis_manager.add_log(
-            forward_uuid,
-            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
-        )
-        return final_uids, final_scores
+from .score_utils import ScoringManager, ScoringBatchLog
 
 
 class ValidatorCore:
@@ -198,25 +108,16 @@ class ValidatorCore:
             forward_uuid, f"Received {len(responses)} responses"
         )
         try:
-            uids, scores = await self.scoring_manager.get_scores(
+            uids, scores, score_logs = await self.scoring_manager.get_scores(
                 responses=responses,
                 synthetic_synapse=synthetic_synapse,
                 uids=uids,
                 forward_uuid=forward_uuid,
             )
-            batch_data = ScoringBatchLog(
-                uids=uids,
-                scores=scores,
-                compressed_user_messages=[
-                    response.compressed_context for response in responses
-                ],
-                original_user_message=synthetic_synapse.user_message,
-                forward_uuid=forward_uuid,
-            )
             try:
                 await self.owner_server.post(
                     "/api/v1/scoring_batch",
-                    json=batch_data.model_dump(),
+                    json=score_logs,
                     headers=get_headers(),
                 )
             except Exception as e:

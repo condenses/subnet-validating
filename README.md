@@ -29,14 +29,14 @@ You can choose between self-hosted LLM inference or using the free LLM Inference
 ```bash
 export HF_TOKEN=your_huggingface_token
 ./scripts/install_vllm.sh
-echo "VLLM__BASE_URL=http://localhost:8000" >> .env # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
+update-env VLLM__BASE_URL http://localhost:8000 # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
 ```
 
 #### 1.2 Free LLM Inference from Subnet 19 - Nineteen
 
 ```bash
-echo "USE_NINETEEN_API=true" >> .env
-echo "VLLM_CONFIG__MODEL_NAME=chat-llama-3-1-70b" >> .env
+update-env USE_NINETEEN_API true
+update-env VLLM_CONFIG__MODEL_NAME chat-llama-3-1-70b
 ```
 
 ### 2. Synthesizing
@@ -44,7 +44,7 @@ echo "VLLM_CONFIG__MODEL_NAME=chat-llama-3-1-70b" >> .env
 **Role**: Serve an endpoint that can synthesize the user message from public dataset.
 
 ```bash
-echo "HF_TOKEN=your_huggingface_token" >> .synthesizing.env
+update-env HF_TOKEN your_huggingface_token
 pm2 start --name "synthesizing" "gunicorn condenses_synthesizing.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9100"
 ```
 
@@ -69,9 +69,9 @@ pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-c
 **Role**: Dedicated process for auto-sync metagraph and chain functions: get-axon, set-weights, get-chain data
 
 ```bash
-echo "WALLET_NAME=default" >> .env
-echo "WALLET_HOTKEY=default" >> .env
-echo "WALLET_PATH=~/.bittensor/wallets" >> .env
+update-env WALLET_NAME default
+update-env WALLET_HOTKEY default
+update-env WALLET_PATH ~/.bittensor/wallets
 pm2 start --name "restful_bittensor" "gunicorn restful_bittensor.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9103"
 ```
 
@@ -80,10 +80,10 @@ pm2 start --name "restful_bittensor" "gunicorn restful_bittensor.server:app --wo
 **Role**: Main process that orchestrates the validating process.
 
 ```bash
-echo "SYNTHESIZING__BASE_URL=http://localhost:9100" >> .env
-echo "NODE_MANAGING__BASE_URL=http://localhost:9101" >> .env
-echo "SCORING__BASE_URL=http://localhost:9102" >> .env
-echo "RESTFUL_BITTENSOR__BASE_URL=http://localhost:9103" >> .env
+update-env SYNTHESIZING__BASE_URL http://localhost:9100
+update-env NODE_MANAGING__BASE_URL http://localhost:9101
+update-env SCORING__BASE_URL http://localhost:9102
+update-env RESTFUL_BITTENSOR__BASE_URL http://localhost:9103
 pm2 start --name "validating" "condenses-validating"
 ```
 
