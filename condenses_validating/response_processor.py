@@ -10,8 +10,10 @@ class ResponseProcessor:
 
     encoding = tiktoken.encoding_for_model("gpt-4o")
 
-    def get_compress_rate(self, response: TextCompressProtocol) -> float:
-        original_tokens = self.encoding.encode(response.user_message)
+    def get_compress_rate(
+        self, response: TextCompressProtocol, ground_truth_context: str
+    ) -> float:
+        original_tokens = self.encoding.encode(ground_truth_context)
         compressed_tokens = self.encoding.encode(response.compressed_context)
         return len(compressed_tokens) / len(original_tokens)
 
@@ -32,7 +34,7 @@ class ResponseProcessor:
                 response
                 and response.is_success
                 and response.verify()
-                and self.get_compress_rate(response)
+                and self.get_compress_rate(response, ground_truth_synapse.context)
                 < CONFIG.validating.max_compress_rate
             ):
                 valid.append((uid, response))
@@ -45,7 +47,7 @@ class ResponseProcessor:
                 elif not response.verify():
                     invalid_reason = "verification_failed"
                 elif (
-                    self.get_compress_rate(response)
+                    self.get_compress_rate(response, ground_truth_synapse.context)
                     > CONFIG.validating.max_compress_rate
                 ):
                     invalid_reason = "compress_rate_too_high"
