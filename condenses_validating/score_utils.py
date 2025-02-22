@@ -6,6 +6,7 @@ from .redis_manager import RedisManager
 from .response_processor import ResponseProcessor
 from pydantic import BaseModel
 import re
+import tiktoken
 
 
 def SCORE_ENSEMBLE(
@@ -14,7 +15,7 @@ def SCORE_ENSEMBLE(
     differentiate_scores: list[float],
 ) -> list[float]:
     return [
-        score * 0.7 + (1 - compress_rate) * 0.3 + differentiate_score * 0.1
+        score * 0.7 + compress_rate * 0.2 + differentiate_score * 0.1
         for score, compress_rate, differentiate_score in zip(
             raw_scores, compress_rates, differentiate_scores
         )
@@ -121,7 +122,17 @@ class ScoringManager:
         self.scoring_client = scoring_client
         self.redis_manager = redis_manager
         self.response_processor = ResponseProcessor()
+        self.tiktoken = tiktoken.encoding_for_model("gpt-4o")
         logger.info("ScoringManager initialized")
+
+    def calculate_compress_rates(
+        self, ref_text: str, compressed_texts: list[str]
+    ) -> list[float]:
+        ref_tokens = len(self.tiktoken.encode(ref_text))
+        compressed_tokens = [
+            len(self.tiktoken.encode(text)) for text in compressed_texts
+        ]
+        return [1 - token_count / ref_tokens for token_count in compressed_tokens]
 
     async def get_scores(
         self,
@@ -187,7 +198,10 @@ class ScoringManager:
                 forward_uuid, f"Received scores: {scored_responses}"
             )
 
-            compress_rates = [response.compress_rate for response in responses_to_score]
+            compress_rates = self.calculate_compress_rates(
+                original_user_message,
+                [response.compressed_context for response in responses_to_score],
+            )
             await self.redis_manager.add_log(
                 forward_uuid, f"Compress rates: {compress_rates}"
             )
