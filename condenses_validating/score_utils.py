@@ -124,6 +124,12 @@ class ScoringBatchLog(BaseModel):
     valid_responses: list[ResponseData] = []
     scored_responses: list[ResponseData] = []
 
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        # Convert datetime to ISO format string
+        data["timestamp"] = data["timestamp"].isoformat()
+        return data
+
 
 class ScoringManager:
     def __init__(self, scoring_client: AsyncScoringClient, redis_manager: RedisManager):
