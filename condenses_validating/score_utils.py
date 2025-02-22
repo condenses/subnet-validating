@@ -4,9 +4,10 @@ from .protocol import TextCompressProtocol
 from loguru import logger
 from .redis_manager import RedisManager
 from .response_processor import ResponseProcessor
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import re
 import tiktoken
+from datetime import datetime
 
 
 def SCORE_ENSEMBLE(
@@ -108,6 +109,7 @@ def get_text_differentiate_score(texts: list[str]) -> list[float]:
 
 
 class ScoringBatchLog(BaseModel):
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
     invalid_uids: list[int] = []
     valid_uids: list[int] = []
     uids_to_score: list[int] = []
