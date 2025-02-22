@@ -13,9 +13,13 @@ class ResponseProcessor:
     def get_compress_rate(
         self, response: TextCompressProtocol, ground_truth_context: str
     ) -> float:
-        original_tokens = self.encoding.encode(ground_truth_context)
-        compressed_tokens = self.encoding.encode(response.compressed_context)
-        return len(compressed_tokens) / len(original_tokens)
+        try:
+            original_tokens = self.encoding.encode(ground_truth_context)
+            compressed_tokens = self.encoding.encode(response.compressed_context)
+            return len(compressed_tokens) / len(original_tokens)
+        except Exception as e:
+            logger.error(f"Error getting compress rate: {e}")
+            raise e
 
     async def validate_responses(
         self,
