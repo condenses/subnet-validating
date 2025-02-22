@@ -108,15 +108,21 @@ def get_text_differentiate_score(texts: list[str]) -> list[float]:
     return scores
 
 
+class ResponseData(BaseModel):
+    uid: int
+    compressed_text: str
+    compress_rate: float | None = None
+    differentiate_score: float | None = None
+    raw_score: float | None = None
+    final_score: float | None = None
+
+
 class ScoringBatchLog(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    invalid_uids: list[int] = []
-    valid_uids: list[int] = []
-    uids_to_score: list[int] = []
-    compress_rates: list[float] = []
-    differentiate_scores: list[float] = []
-    raw_scores: list[float] = []
-    final_scores: list[float] = []
+    original_user_message: str = ""
+    invalid_responses: list[ResponseData] = []
+    valid_responses: list[ResponseData] = []
+    scored_responses: list[ResponseData] = []
 
 
 class ScoringManager:
@@ -142,12 +148,11 @@ class ScoringManager:
         synthetic_synapse: TextCompressProtocol,
         uids: list[int],
         forward_uuid: str,
-    ) -> tuple[list[int], list[float], ScoringBatchLog]:
+    ) -> tuple[list[int], list[float], dict]:
         score_logs = ScoringBatchLog(
-            invalid_uids=[],
-            valid_uids=[],
-            uids_to_score=[],
+            original_user_message=synthetic_synapse.user_message
         )
+
         await self.redis_manager.add_log(
             forward_uuid, f"Processing responses from {len(uids)} UIDs"
         )
@@ -155,100 +160,92 @@ class ScoringManager:
             uids, responses, synthetic_synapse
         )
 
-        invalid_uids = [uid for uid, _, _ in invalid]
-        invalid_scores = [0] * len(invalid)
-        valid_uids = [uid for uid, _ in valid]
-        valid_responses_dict = {uid: response for uid, response in valid}
+        # Process invalid responses
+        score_logs.invalid_responses = [
+            ResponseData(
+                uid=uid,
+                compressed_text=response.compressed_context if response else "",
+                final_score=0.0,
+            )
+            for uid, response, _ in invalid
+        ]
 
-        score_logs.invalid_uids = invalid_uids
-        score_logs.valid_uids = valid_uids
+        # Process valid responses
+        valid_responses = [
+            ResponseData(uid=uid, compressed_text=response.compressed_context)
+            for uid, response in valid
+        ]
+        score_logs.valid_responses = valid_responses
 
-        if not valid_uids:
+        if not valid_responses:
             await self.redis_manager.add_log(
                 forward_uuid, "Warning: No valid responses received"
             )
-            return invalid_uids, invalid_scores, score_logs
+            return (
+                [r.uid for r in score_logs.invalid_responses],
+                [r.final_score for r in score_logs.invalid_responses],
+                score_logs.model_dump(),
+            )
 
-        await self.redis_manager.add_log(
-            forward_uuid, f"Validating {len(valid_uids)} UIDs"
-        )
+        # Filter responses that need scoring
         scored_counter = await self.redis_manager.get_scored_counter()
-        uids_to_score = [
-            uid
-            for uid in valid_uids
-            if scored_counter.get(uid, 0)
+        responses_to_score = [
+            response
+            for response in valid_responses
+            if scored_counter.get(response.uid, 0)
             < CONFIG.validating.scoring_rate.max_scoring_count
         ]
-        score_logs.uids_to_score = uids_to_score
 
-        if uids_to_score:
+        if responses_to_score:
             await self.redis_manager.add_log(
-                forward_uuid, f"Scoring {len(uids_to_score)} UIDs"
+                forward_uuid, f"Scoring {len(responses_to_score)} UIDs"
             )
-            # Get responses only for UIDs that need scoring
-            responses_to_score = [valid_responses_dict[uid] for uid in uids_to_score]
 
-            original_user_message = synthetic_synapse.user_message
-            scored_responses = await self.scoring_client.score_batch(
-                original_user_message=original_user_message,
+            # Get scores and rates
+            raw_scores = await self.scoring_client.score_batch(
+                original_user_message=score_logs.original_user_message,
                 batch_compressed_user_messages=[
-                    response.compressed_context for response in responses_to_score
+                    r.compressed_text for r in responses_to_score
                 ],
                 timeout=360,
             )
-            await self.redis_manager.add_log(
-                forward_uuid, f"Received scores: {scored_responses}"
-            )
 
             compress_rates = self.calculate_compress_rates(
-                original_user_message,
-                [response.compressed_context for response in responses_to_score],
-            )
-            await self.redis_manager.add_log(
-                forward_uuid, f"Compress rates: {compress_rates}"
+                score_logs.original_user_message,
+                [r.compressed_text for r in responses_to_score],
             )
 
             differentiate_scores = get_text_differentiate_score(
-                [response.compressed_context for response in responses_to_score]
-            )
-            await self.redis_manager.add_log(
-                forward_uuid, f"Differentiate scores: {differentiate_scores}"
+                [r.compressed_text for r in responses_to_score]
             )
 
-            score_logs.compress_rates = compress_rates
-            score_logs.differentiate_scores = differentiate_scores
-            score_logs.raw_scores = scored_responses
-
-            final_scored_responses = SCORE_ENSEMBLE(
-                scored_responses, compress_rates, differentiate_scores
+            final_scores = SCORE_ENSEMBLE(
+                raw_scores, compress_rates, differentiate_scores
             )
-            await self.redis_manager.add_log(
-                forward_uuid, f"Final scores: {final_scored_responses}"
+
+            # Update response data with scores
+            for response, raw_score, compress_rate, diff_score, final_score in zip(
+                responses_to_score,
+                raw_scores,
+                compress_rates,
+                differentiate_scores,
+                final_scores,
+            ):
+                response.raw_score = raw_score
+                response.compress_rate = compress_rate
+                response.differentiate_score = diff_score
+                response.final_score = final_score
+
+            score_logs.scored_responses = responses_to_score
+            await self.redis_manager.update_scoring_records(
+                [r.uid for r in responses_to_score], CONFIG
             )
-            score_logs.final_scores = final_scored_responses
 
-            # Create a mapping of scores for valid UIDs
-            valid_scores_dict = {uid: 0.0 for uid in valid_uids}  # Initialize all to 0
-            for uid, score in zip(uids_to_score, final_scored_responses):
-                valid_scores_dict[uid] = score
+        # Prepare final results
+        all_responses = {r.uid: r for r in score_logs.invalid_responses}
+        all_responses.update({r.uid: r for r in valid_responses})
 
-            valid_scores = [valid_scores_dict[uid] for uid in valid_uids]
-            await self.redis_manager.update_scoring_records(uids_to_score, CONFIG)
-            await self.redis_manager.add_log(
-                forward_uuid, "Updated scoring records in Redis"
-            )
-        else:
-            await self.redis_manager.add_log(
-                forward_uuid, "Warning: No UIDs eligible for scoring"
-            )
-            valid_uids = []
-            valid_scores = []
+        final_uids = list(all_responses.keys())
+        final_scores = [all_responses[uid].final_score or 0.0 for uid in final_uids]
 
-        final_uids = invalid_uids + valid_uids
-        final_scores = invalid_scores + valid_scores
-
-        await self.redis_manager.add_log(
-            forward_uuid,
-            f"Final results - UIDs: {len(final_uids)}, Scores: {len(final_scores)}",
-        )
         return final_uids, final_scores, score_logs.model_dump()
