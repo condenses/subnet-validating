@@ -46,7 +46,7 @@ class ValidatorCore:
         self.animation_idx = 0
         logger.success("ValidatorCore initialization complete")
         self.owner_server = httpx.AsyncClient(
-            base_url="https://reporting.condenses.ai",
+            base_url=CONFIG.owner_server.base_url,
         )
 
     async def get_synthetic(self) -> TextCompressProtocol:

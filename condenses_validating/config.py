@@ -50,6 +50,10 @@ class ValidatingConfig(BaseModel):
     scoring_rate: ScoringRateConfig = ScoringRateConfig()
 
 
+class OwnerServerConfig(BaseModel):
+    base_url: str = "https://reporting.condenses.ai"
+
+
 class Settings(BaseSettings):
     redis: RedisConfig = RedisConfig()
     server: ServerConfig = ServerConfig()
@@ -58,6 +62,7 @@ class Settings(BaseSettings):
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     restful_bittensor: RestfulBittensorConfig = RestfulBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
+    owner_server: OwnerServerConfig = OwnerServerConfig()
     wallet_name: str = "default"
     wallet_hotkey: str = "default"
     wallet_path: str = "~/.bittensor/wallets"
