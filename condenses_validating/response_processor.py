@@ -38,7 +38,7 @@ class ResponseProcessor:
                 response
                 and response.is_success
                 and response.verify()
-                and self.get_compress_rate(response, ground_truth_synapse.context)
+                and self.get_compress_rate(response, ground_truth_synapse.user_message)
                 < CONFIG.validating.max_compress_rate
             ):
                 valid.append((uid, response))
@@ -51,7 +51,7 @@ class ResponseProcessor:
                 elif not response.verify():
                     invalid_reason = "verification_failed"
                 elif (
-                    self.get_compress_rate(response, ground_truth_synapse.context)
+                    self.get_compress_rate(response, ground_truth_synapse.user_message)
                     > CONFIG.validating.max_compress_rate
                 ):
                     invalid_reason = "compress_rate_too_high"
