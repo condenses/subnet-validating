@@ -126,8 +126,8 @@ class ScoringBatchLog(BaseModel):
 
     def model_dump(self, **kwargs):
         data = super().model_dump(**kwargs)
-        # Convert datetime to specified format string
-        data["timestamp"] = data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
+        # Convert datetime to ISO format string
+        data["timestamp"] = data["timestamp"].isoformat()
         return data
 
 
