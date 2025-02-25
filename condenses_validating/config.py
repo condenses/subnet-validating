@@ -39,8 +39,8 @@ class ScoringRateConfig(BaseModel):
 
 
 class ValidatingConfig(BaseModel):
-    batch_size: int = 1
-    concurrent_forward: int = 2
+    batch_size: int = 4
+    concurrent_forward: int = 128
     forward_sleep: float = 4
     max_compress_rate: float = 0.8
     synthetic_rate_limit: float = 0.5
@@ -51,7 +51,7 @@ class ValidatingConfig(BaseModel):
 
 
 class OwnerServerConfig(BaseModel):
-    base_url: str = "https://reporting.condenses.ai"
+    base_url: str = "https://subnet-reporting.condenses.ai"
 
 
 class Settings(BaseSettings):
