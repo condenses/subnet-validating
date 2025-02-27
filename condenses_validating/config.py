@@ -16,7 +16,7 @@ class ServerConfig(BaseModel):
     host: str = "0.0.0.0"
 
 
-class RestfulBittensorConfig(BaseModel):
+class SidecarBittensorConfig(BaseModel):
     base_url: str = "http://localhost:9100"
 
 
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     validating: ValidatingConfig = ValidatingConfig()
     scoring: ScoringConfig = ScoringConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
-    restful_bittensor: RestfulBittensorConfig = RestfulBittensorConfig()
+    sidecar_bittensor: SidecarBittensorConfig = SidecarBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
     owner_server: OwnerServerConfig = OwnerServerConfig()
     wallet_name: str = "default"

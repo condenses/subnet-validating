@@ -4,7 +4,7 @@ packages = ["condenses_validating"]
 [tool.uv.sources]
 subnet-node-managing = { git = "https://github.com/condenses/subnet-node-managing.git" }
 text-compress-scoring = { git = "https://github.com/condenses/text-compress-scoring.git" }
-restful-bittensor = { git = "https://github.com/condenses/restful-bittensor.git" }
+sidecar-bittensor = { git = "https://github.com/condenses/sidecar-bittensor.git" }
 subnet-synthesizing = { git = "https://github.com/condenses/subnet-synthesizing" }
 
 [build-system]
@@ -30,7 +30,7 @@ dependencies = [
     "pydantic-settings>=2.7.1",
     "pymongo>=4.11.1",
     "redis>=5.2.1",
-    "restful-bittensor",
+    "sidecar-bittensor",
     "subnet-node-managing",
     "subnet-synthesizing",
     "text-compress-scoring",
@@ -38,11 +38,6 @@ dependencies = [
     "tiktoken>=0.9.0",
     "uvicorn>=0.34.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/yourusername/restful-bittensor"
-Repository = "https://github.com/yourusername/restful-bittensor.git"
-
 
 [project.scripts]
 condenses-validating = "condenses_validating.main:start_loop"

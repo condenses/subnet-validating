@@ -78,7 +78,7 @@ pm2 start python --name "node_managing" -- -m uvicorn condenses_node_managing.se
 pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app --host 127.0.0.1 --port 9102
 ```
 
-### 5. Restful Bittensor
+### 5. Sidecar Bittensor
 
 **Role**: Dedicated process for auto-sync metagraph and chain functions: get-axon, set-weights, get-chain data
 
@@ -86,7 +86,7 @@ pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app
 update-env WALLET_NAME default
 update-env WALLET_HOTKEY default
 update-env WALLET_PATH ~/.bittensor/wallets
-pm2 start python --name "restful_bittensor" -- -m uvicorn restful_bittensor.server:app --host 127.0.0.1 --port 9103
+pm2 start python --name "sidecar-bittensor" -- -m uvicorn sidecar_bittensor.server:app --host 127.0.0.1 --port 9103
 ```
 
 ### 6. Validating
@@ -97,8 +97,8 @@ pm2 start python --name "restful_bittensor" -- -m uvicorn restful_bittensor.serv
 update-env SYNTHESIZING__BASE_URL http://localhost:9100
 update-env NODE_MANAGING__BASE_URL http://localhost:9101
 update-env SCORING__BASE_URL http://localhost:9102
-update-env RESTFUL_BITTENSOR__BASE_URL http://localhost:9103
-pm2 start python --name "validating" -- -m condenses_validating.main
+update-env SIDECAR_BITTENSOR__BASE_URL http://localhost:9103
+pm2 start --name "validating" "condenses-validating"
 ```
 
 ### 7. Log Viewer
@@ -115,5 +115,5 @@ python condenses_validating/log_viewer.py
 
 - [Subnet Node Managing](https://github.com/condenses/subnet-node-managing)
 - [Text Compress Scoring](https://github.com/condenses/text-compress-scoring)
-- [Restful Bittensor](https://github.com/condenses/restful-bittensor)
+- [Sidecar Bittensor](https://github.com/condenses/sidecar-bittensor)
 - [Subnet Synthesizing](https://github.com/condenses/subnet-synthesizing)
