@@ -30,7 +30,7 @@ class ValidatorCore:
         self.orchestrator = AsyncOrchestratorClient(CONFIG.orchestrator.base_url)
         self.scoring_client = AsyncScoringClient(CONFIG.scoring.base_url)
         self.restful_bittensor = AsyncRestfulBittensor(
-            CONFIG.restful_bittensor.base_url
+            CONFIG.sidecar_bittensor.base_url
         )
         self.synthesizing = AsyncSynthesizingClient(CONFIG.synthesizing.base_url)
         self.scoring_manager = ScoringManager(self.scoring_client, self.redis_manager)
