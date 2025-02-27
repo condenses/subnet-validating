@@ -59,7 +59,7 @@ update-env VLLM_CONFIG__MODEL_NAME chat-llama-3-1-70b
 
 ```bash
 update-env HF_TOKEN your_huggingface_token
-pm2 start --name "synthesizing" "gunicorn condenses_synthesizing.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9100"
+pm2 start python --name "synthesizing" -- -m uvicorn condenses_synthesizing.server:app --host 127.0.0.1 --port 9100
 ```
 
 ### 3. Node Managing
@@ -67,7 +67,7 @@ pm2 start --name "synthesizing" "gunicorn condenses_synthesizing.server:app --wo
 **Role**: Manage credit & "validator -> miner" rate limit. Orchestrating UIDs for synthetic validation.
 
 ```bash
-pm2 start --name "node_managing" "gunicorn condenses_node_managing.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9101"
+pm2 start python --name "node_managing" -- -m uvicorn condenses_node_managing.server:app --host 127.0.0.1 --port 9101
 ```
 
 ### 4. Scoring
@@ -75,7 +75,7 @@ pm2 start --name "node_managing" "gunicorn condenses_node_managing.server:app --
 **Role**: Receive original message and compressed messages, run scoring algorithm and return the score.
 
 ```bash
-pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9102"
+pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app --host 127.0.0.1 --port 9102
 ```
 
 ### 5. Restful Bittensor
@@ -86,7 +86,7 @@ pm2 start --name "scoring" "gunicorn text_compress_scoring.server:app --worker-c
 update-env WALLET_NAME default
 update-env WALLET_HOTKEY default
 update-env WALLET_PATH ~/.bittensor/wallets
-pm2 start --name "restful_bittensor" "gunicorn restful_bittensor.server:app --worker-class uvicorn.workers.UvicornWorker --bind 127.0.0.1:9103"
+pm2 start python --name "restful_bittensor" -- -m uvicorn restful_bittensor.server:app --host 127.0.0.1 --port 9103
 ```
 
 ### 6. Validating
@@ -98,7 +98,7 @@ update-env SYNTHESIZING__BASE_URL http://localhost:9100
 update-env NODE_MANAGING__BASE_URL http://localhost:9101
 update-env SCORING__BASE_URL http://localhost:9102
 update-env RESTFUL_BITTENSOR__BASE_URL http://localhost:9103
-pm2 start --name "validating" "condenses-validating"
+pm2 start python --name "validating" -- -m condenses_validating.main
 ```
 
 ### 7. Log Viewer
