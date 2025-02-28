@@ -84,7 +84,7 @@ class ValidatorCore:
             return
         await self.redis_manager.add_log(forward_uuid, f"Processing UIDs: {uids}")
         try:
-            axons = await self.get_axons(uids)
+            uids, axons = await self.get_axons(uids)
         except Exception as e:
             await self.redis_manager.add_log(
                 forward_uuid, f"Error in getting axons: {e}"
