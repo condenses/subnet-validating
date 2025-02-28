@@ -54,10 +54,10 @@ class ValidatorCore:
         user_message = synth_response.user_message
         return TextCompressProtocol(user_message=user_message)
 
-    async def get_axons(self, uids: list[int]) -> list[bt.AxonInfo]:
-        string_axons = await self.restful_bittensor.get_axons(uids=uids)
+    async def get_axons(self, uids: list[int]) -> tuple[list[int], list[bt.AxonInfo]]:
+        uids, string_axons = await self.restful_bittensor.get_axons(uids=uids)
         axons = [bt.AxonInfo.from_string(axon) for axon in string_axons]
-        return axons
+        return uids, axons
 
     async def forward(self):
         forward_uuid = str(uuid.uuid4())
