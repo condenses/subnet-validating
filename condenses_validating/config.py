@@ -17,7 +17,7 @@ class ServerConfig(BaseModel):
 
 
 class SidecarBittensorConfig(BaseModel):
-    base_url: str = "http://localhost:9100"
+    base_url: str = "http://localhost:9103"
 
 
 class OrchestratorConfig(BaseModel):
@@ -29,7 +29,7 @@ class ScoringConfig(BaseModel):
 
 
 class SynthesizingConfig(BaseModel):
-    base_url: str = "http://localhost:9103"
+    base_url: str = "http://localhost:9100"
 
 
 class ScoringRateConfig(BaseModel):
