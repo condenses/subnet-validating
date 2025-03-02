@@ -34,23 +34,19 @@ uv sync --prerelease=allow
 
 ### 1. Setup LLM Inference
 
-You can choose between self-hosted LLM inference or using the free LLM Inference from Subnet 19 - Nineteen.
-
 #### 1.1 Self-hosted LLM Inference
 
 *Requires A100 or H100 GPU*
 
 ```bash
+export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 export HF_TOKEN=your_huggingface_token
-./scripts/install_vllm.sh
+uv venv .vllm-venv
+. .vllm-venv/bin/activate
+uv pip install vllm
+pm2 start --name vllm "vllm serve $MODEL_NAME --enable-prefix-caching --enable-chunked-prefill"
+. .venv/bin/activate
 update-env VLLM__BASE_URL http://localhost:8000 # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
-```
-
-#### 1.2 Free LLM Inference from Subnet 19 - Nineteen
-
-```bash
-update-env USE_NINETEEN_API true
-update-env VLLM_CONFIG__MODEL_NAME chat-llama-3-1-70b
 ```
 
 ### 2. Synthesizing
@@ -75,6 +71,7 @@ pm2 start python --name "node_managing" -- -m uvicorn condenses_node_managing.se
 **Role**: Receive original message and compressed messages, run scoring algorithm and return the score.
 
 ```bash
+update-env VLLM_CONFIG__MODEL_NAME $MODEL_NAME
 pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app --host 127.0.0.1 --port 9102
 ```
 
