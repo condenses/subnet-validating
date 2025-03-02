@@ -44,6 +44,7 @@ export HF_TOKEN=your_huggingface_token
 uv venv .vllm-venv
 . .vllm-venv/bin/activate
 uv pip install vllm
+export CUDA_VISIBLE_DEVICES=0 # Change to your GPU index
 pm2 start --name vllm "vllm serve $MODEL_NAME --enable-prefix-caching --enable-chunked-prefill"
 . .venv/bin/activate
 update-env VLLM__BASE_URL http://localhost:8000 # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
@@ -72,6 +73,7 @@ pm2 start python --name "node_managing" -- -m uvicorn condenses_node_managing.se
 
 ```bash
 update-env VLLM_CONFIG__MODEL_NAME $MODEL_NAME
+export CUDA_VISIBLE_DEVICES=0 # Change to your GPU index
 pm2 start python --name "scoring" -- -m uvicorn text_compress_scoring.server:app --host 127.0.0.1 --port 9102
 ```
 
