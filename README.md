@@ -97,7 +97,7 @@ update-env SYNTHESIZING__BASE_URL http://localhost:9100
 update-env NODE_MANAGING__BASE_URL http://localhost:9101
 update-env SCORING__BASE_URL http://localhost:9102
 update-env SIDECAR_BITTENSOR__BASE_URL http://localhost:9103
-pm2 start --name "validating" "condenses-validating"
+pm2 start --name "validating" --interpreter python "condenses-validating"
 ```
 
 ### 7. Log Viewer
