@@ -37,7 +37,7 @@ uv sync --prerelease=allow
 #### 1.1 Self-hosted LLM Inference
 
 *Requires A100 or H100 GPU*
-
+- Get access to the model from https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct then obtain a token from huggingface
 ```bash
 export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 export HF_TOKEN=your_huggingface_token
