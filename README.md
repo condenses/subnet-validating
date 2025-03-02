@@ -22,7 +22,8 @@ The compression rate and differentiation score act as multipliers that can boost
 To install the necessary components, run the following commands:
 
 ```bash
-pip install git+https://github.com/condenses/condenses-validating.git
+git clone https://github.com/condenses/subnet-validating
+cd subnet-validating
 pip install uv
 uv venv
 . .venv/bin/activate
