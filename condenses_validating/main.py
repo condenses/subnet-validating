@@ -168,7 +168,7 @@ class ValidatorCore:
             try:
                 uids, weights = await self.orchestrator.get_score_weights()
                 result, msg = await self.restful_bittensor.set_weights(
-                    uids=uids, weights=weights, netuid=47, version=CONFIG.version
+                    uids=uids, weights=weights, netuid=47, version=CONFIG.weight_version
                 )
                 if result:
                     await self.redis_manager.add_log(

@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     wallet_name: str = "default"
     wallet_hotkey: str = "default"
     wallet_path: str = "~/.bittensor/wallets"
-    version: int = 100
+    weight_version: int = 100
 
     class Config:
         env_nested_delimiter = "__"
