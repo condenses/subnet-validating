@@ -42,8 +42,6 @@ class ValidatorCore:
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
-        self.animation_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-        self.animation_idx = 0
         logger.success("ValidatorCore initialization complete")
         self.owner_server = httpx.AsyncClient(
             base_url=CONFIG.owner_server.base_url,
@@ -61,8 +59,10 @@ class ValidatorCore:
 
     async def forward(self):
         forward_uuid = str(uuid.uuid4())
+        logger.info(f"Starting forward pass {forward_uuid}")
         await self.redis_manager.add_log(forward_uuid, "Starting forward pass")
         try:
+            logger.info(f"[{forward_uuid}] Consuming rate limits")
             uids = await self.orchestrator.consume_rate_limits(
                 uid=None,
                 top_fraction=1.0,
@@ -70,7 +70,9 @@ class ValidatorCore:
                 acceptable_consumed_rate=CONFIG.validating.synthetic_rate_limit,
                 timeout=24,
             )
+            logger.info(f"[{forward_uuid}] Consumed rate limits for {len(uids)} UIDs")
         except Exception as e:
+            logger.error(f"[{forward_uuid}] Error in consuming rate limits: {e}")
             await self.redis_manager.add_log(
                 forward_uuid, f"Error in consuming rate limits: {e}"
             )
@@ -147,14 +149,17 @@ class ValidatorCore:
         await self.redis_manager.flush_db()
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
-        asyncio.create_task(self.animate_progress())
 
         while not self.should_exit:
             try:
+                logger.info(
+                    f"Starting {CONFIG.validating.concurrent_forward} concurrent forward passes"
+                )
                 concurrent_forwards = [
                     self.forward() for _ in range(CONFIG.validating.concurrent_forward)
                 ]
                 await asyncio.gather(*concurrent_forwards)
+                logger.info("Completed batch of forward passes, sleeping for 8 seconds")
                 await asyncio.sleep(8)
             except Exception as e:
                 logger.error(f"Forward error: {e}")
@@ -166,11 +171,14 @@ class ValidatorCore:
     async def periodically_set_weights(self):
         while not self.should_exit:
             try:
+                logger.info("Fetching score weights from orchestrator")
                 uids, weights = await self.orchestrator.get_score_weights()
+                logger.info(f"Setting weights for {len(uids)} UIDs")
                 result, msg = await self.restful_bittensor.set_weights(
                     uids=uids, weights=weights, netuid=47, version=CONFIG.weight_version
                 )
                 if result:
+                    logger.success(f"Successfully updated weights with message: {msg}")
                     await self.redis_manager.add_log(
                         "set_weights",
                         f"Updated weights at {datetime.now()}\n"
@@ -179,21 +187,15 @@ class ValidatorCore:
                         f"{msg}",
                     )
                 else:
+                    logger.error(f"Failed to update weights: {msg}")
                     await self.redis_manager.add_log(
                         "set_weights",
                         f"Failed to update weights: {msg}",
                     )
             except Exception as e:
                 logger.error(f"Weight update error: {e}")
+            logger.info("Weight update cycle complete, sleeping for 60 seconds")
             await asyncio.sleep(60)
-
-    async def animate_progress(self):
-        """Displays an animation to indicate the validator is running"""
-        while not self.should_exit:
-            animation_char = self.animation_chars[self.animation_idx]
-            print(f"\r{animation_char} Validator running...", end="", flush=True)
-            self.animation_idx = (self.animation_idx + 1) % len(self.animation_chars)
-            await asyncio.sleep(0.1)
 
 
 def start_loop():
