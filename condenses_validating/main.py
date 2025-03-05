@@ -156,7 +156,7 @@ class ValidatorCore:
                 logger.info(
                     f"Starting {CONFIG.validating.concurrent_forward} staggered forward passes (one every 2 seconds)"
                 )
-                while len(tasks) < CONFIG.validating.concurrent_forward:
+                while len(tasks) > CONFIG.validating.concurrent_forward:
                     # Drop finished tasks
                     tasks = [task for task in tasks if not task.done()]
                     logger.info(f"Waiting for {len(tasks)} tasks to finish")
