@@ -29,6 +29,7 @@ dependencies = [
     "loguru>=0.7.3",
     "pydantic-settings>=2.7.1",
     "pymongo>=4.11.1",
+    "ray>=2.43.0",
     "redis>=5.2.1",
     "sidecar-bittensor",
     "subnet-node-managing",
