@@ -142,6 +142,7 @@ class ValidatorCore:
             )
             return
         await self.redis_manager.add_log(forward_uuid, "✓ Forward complete")
+        return True
 
     async def run(self) -> None:
         """Main validator loop"""
@@ -157,11 +158,15 @@ class ValidatorCore:
                     f"Starting {CONFIG.validating.concurrent_forward} staggered forward passes (one every 2 seconds)"
                 )
                 while len(tasks) > CONFIG.validating.concurrent_forward:
-                    # Drop finished tasks
-                    tasks = [task for task in tasks if not task.done()]
+                    # Drop finished tasks or timeout tasks
+                    tasks = [
+                        task
+                        for task in tasks
+                        if not task.done() or task.done() and task.result() is None
+                    ]
                     logger.info(f"Waiting for {len(tasks)} tasks to finish")
                     await asyncio.sleep(2)
-                tasks.append(asyncio.create_task(self.forward()))
+                tasks.append(asyncio.create_task(asyncio.wait_for(self.forward(), 60)))
                 logger.success(f"Started {len(tasks)} tasks")
             except Exception as e:
                 logger.error(f"Forward error: {e}")
