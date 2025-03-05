@@ -6,23 +6,22 @@ from condenses_synthesizing.client import AsyncSynthesizingClient
 from condenses_validating.config import CONFIG
 from .protocol import TextCompressProtocol
 import asyncio
+import ray
 from loguru import logger
 from redis.asyncio import Redis
 import traceback
 from .redis_manager import RedisManager
-from .response_processor import ResponseProcessor
-from .log_processor import ForwardLog
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
 import httpx
 from .secured_headers import get_headers
-from .score_utils import ScoringManager, ScoringBatchLog
+from .score_utils import ScoringManager
 
 
 class ValidatorCore:
     def __init__(self):
         logger.info("Initializing ValidatorCore")
+        ray.init(ignore_reinit_error=True)
         self.redis_client = Redis(
             host=CONFIG.redis.host, port=CONFIG.redis.port, db=CONFIG.redis.db
         )
@@ -57,8 +56,18 @@ class ValidatorCore:
         axons = [bt.AxonInfo.from_string(axon) for axon in string_axons]
         return uids, axons
 
-    async def forward(self):
-        forward_uuid = str(uuid.uuid4())
+    @ray.remote
+    def forward_ray(self, forward_uuid):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(self.forward(forward_uuid))
+        finally:
+            loop.close()
+
+    async def forward(self, forward_uuid=None):
+        if not forward_uuid:
+            forward_uuid = str(uuid.uuid4())
         logger.info(f"Starting forward pass {forward_uuid}")
         await self.redis_manager.add_log(forward_uuid, "Starting forward pass")
         try:
@@ -153,12 +162,18 @@ class ValidatorCore:
         while not self.should_exit:
             try:
                 logger.info(
-                    f"Starting {CONFIG.validating.concurrent_forward} concurrent forward passes"
+                    f"Starting {CONFIG.validating.concurrent_forward} concurrent forward passes with Ray"
                 )
-                concurrent_forwards = [
-                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
+
+                forward_uuids = [
+                    str(uuid.uuid4())
+                    for _ in range(CONFIG.validating.concurrent_forward)
                 ]
-                await asyncio.gather(*concurrent_forwards)
+
+                ray_tasks = [self.forward_ray.remote(uuid) for uuid in forward_uuids]
+
+                ray.get(ray_tasks)
+
                 logger.info("Completed batch of forward passes, sleeping for 8 seconds")
                 await asyncio.sleep(8)
             except Exception as e:
@@ -166,6 +181,7 @@ class ValidatorCore:
                 traceback.print_exc()
             except KeyboardInterrupt:
                 logger.success("Validator killed by keyboard interrupt.")
+                ray.shutdown()
                 exit()
 
     async def periodically_set_weights(self):
@@ -202,4 +218,7 @@ def start_loop():
     logger.info("Initializing validator")
     validator = ValidatorCore()
     logger.info("Starting validator loop")
-    asyncio.run(validator.run())
+    try:
+        asyncio.run(validator.run())
+    finally:
+        ray.shutdown()
