@@ -150,17 +150,19 @@ class ValidatorCore:
         logger.info("Redis DB flushed")
         asyncio.create_task(self.periodically_set_weights())
 
+        tasks = []
         while not self.should_exit:
             try:
                 logger.info(
-                    f"Starting {CONFIG.validating.concurrent_forward} concurrent forward passes"
+                    f"Starting {CONFIG.validating.concurrent_forward} staggered forward passes (one every 2 seconds)"
                 )
-                concurrent_forwards = [
-                    self.forward() for _ in range(CONFIG.validating.concurrent_forward)
-                ]
-                await asyncio.gather(*concurrent_forwards)
-                logger.info("Completed batch of forward passes, sleeping for 8 seconds")
-                await asyncio.sleep(8)
+                while len(tasks) < CONFIG.validating.concurrent_forward:
+                    # Drop finished tasks
+                    tasks = [task for task in tasks if not task.done()]
+                    logger.info(f"Waiting for {len(tasks)} tasks to finish")
+                    await asyncio.sleep(2)
+                tasks.append(asyncio.create_task(self.forward()))
+                logger.success(f"Started {len(tasks)} tasks")
             except Exception as e:
                 logger.error(f"Forward error: {e}")
                 traceback.print_exc()
