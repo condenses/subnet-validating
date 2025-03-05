@@ -166,7 +166,7 @@ class ValidatorCore:
                     ]
                     logger.info(f"Waiting for {len(tasks)} tasks to finish")
                     await asyncio.sleep(2)
-                tasks.append(asyncio.create_task(asyncio.wait_for(self.forward(), 60)))
+                tasks.append(asyncio.create_task(self.forward()))
                 logger.success(f"Started {len(tasks)} tasks")
             except Exception as e:
                 logger.error(f"Forward error: {e}")
