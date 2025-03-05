@@ -170,7 +170,10 @@ class ValidatorCore:
                     for _ in range(CONFIG.validating.concurrent_forward)
                 ]
 
-                ray_tasks = [self.forward_ray.remote(uuid) for uuid in forward_uuids]
+                ray_tasks = [
+                    ValidatorCore.forward_ray.remote(self, uuid)
+                    for uuid in forward_uuids
+                ]
 
                 ray.get(ray_tasks)
 
