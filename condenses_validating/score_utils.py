@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 import re
 import tiktoken
 from datetime import datetime
+from datasketch import MinHash, MinHashLSH
 
 
 def SCORE_ENSEMBLE(
@@ -89,21 +90,22 @@ def get_text_differentiate_score(texts: list[str]) -> list[float]:
     if len(texts) == 1:
         return [1.0]
 
-    n = len(texts)
+    # Create MinHash signatures
+    lsh = MinHashLSH(threshold=0.5, num_perm=128)
+    minhashes = []
+
+    for i, text in enumerate(texts):
+        m = MinHash(num_perm=128)
+        for word in extract_words(text):
+            m.update(word.encode("utf-8"))
+        lsh.insert(i, m)
+        minhashes.append(m)
+
+    # Calculate uniqueness scores
     scores = []
-
-    for i, text1 in enumerate(texts):
-        # Calculate average difference (1 - similarity) from all other texts
-        total_diff = 0.0
-        for j, text2 in enumerate(texts):
-            if i != j:
-                similarity = word_edit_similarity(text1, text2)
-                difference = 1.0 - similarity
-                total_diff += difference
-
-        # Average difference score for this text
-        avg_diff = total_diff / (n - 1)
-        scores.append(avg_diff)
+    for i, m in enumerate(minhashes):
+        similar = lsh.query(m)
+        scores.append(1 - (len(similar) - 1) / len(texts))  # -1 to exclude self
 
     return scores
 
@@ -194,7 +196,9 @@ class ScoringManager:
             )
 
         # Filter responses that need scoring
-        scored_counter = await self.redis_manager.get_scored_counter()
+        scored_counter = await self.redis_manager.get_scored_counter(
+            [r.uid for r in valid_responses]
+        )
         responses_to_score = [
             response
             for response in valid_responses
