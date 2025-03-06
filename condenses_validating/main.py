@@ -10,14 +10,11 @@ from loguru import logger
 from redis.asyncio import Redis
 import traceback
 from .redis_manager import RedisManager
-from .response_processor import ResponseProcessor
-from .log_processor import ForwardLog
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
 import httpx
 from .secured_headers import get_headers
-from .score_utils import ScoringManager, ScoringBatchLog
+from .score_utils import ScoringManager
 
 
 class ValidatorCore:
@@ -178,12 +175,31 @@ class ValidatorCore:
                     tasks = [
                         task
                         for task in tasks
-                        if not task.done() or task.done() and task.result() is None
+                        if not task.done()
+                        or (
+                            task.done()
+                            and not task.exception()
+                            and task.result() is not None
+                        )
                     ]
                     logger.info(f"Waiting for {len(tasks)} tasks to finish")
                     await asyncio.sleep(2)
-                tasks.append(asyncio.create_task(self.forward()))
+
+                # Create a new forward task with timeout
+                forward_task = asyncio.create_task(self.forward())
+                # Add timeout to the task
+                forward_timeout_task = asyncio.create_task(
+                    asyncio.wait_for(forward_task, timeout=360)
+                )
+                tasks.append(forward_timeout_task)
                 logger.success(f"Started {len(tasks)} tasks")
+
+                # Stagger the creation of forward tasks
+                await asyncio.sleep(2)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Forward task timed out after {CONFIG.validating.forward_timeout} seconds"
+                )
             except Exception as e:
                 logger.error(f"Forward error: {e}")
                 traceback.print_exc()
