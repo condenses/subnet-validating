@@ -14,14 +14,11 @@ class RedisManager:
 
     async def get_scored_counter(self, uids: List[int]) -> Dict[int, int]:
         """Get counter of scored UIDs"""
-        scored_counter = {}
-        # Only scan for the specific UIDs in the provided list
-        for uid in uids:
-            key = f"scored_uid:{uid}"
-            count = await self.redis.get(key)
-            if count is not None:
-                scored_counter[uid] = int(count)
-        return scored_counter
+        keys = [f"scored_uid:{uid}" for uid in uids]
+        counts = await self.redis.mget(keys)
+        return {
+            uid: int(count) for uid, count in zip(uids, counts) if count is not None
+        }
 
     async def update_scoring_records(self, uids: List[int], config: Any) -> None:
         """Update scoring records in Redis"""
@@ -34,11 +31,9 @@ class RedisManager:
 
     async def add_log(self, forward_uuid: str, message: str) -> None:
         """Add a log message to Redis"""
-        timestamp = datetime.now().isoformat()
         log_key = f"log:{forward_uuid}"
-
-        # Store log entry as a hash with timestamp and message
-        await self.redis.hset(log_key, timestamp, message)
+        timestamp = datetime.now().timestamp()
+        await self.redis.zadd(log_key, {message: timestamp})
         await self.redis.expire(log_key, self.log_ttl)
 
     async def get_logs(self, forward_uuid: str) -> List[tuple[str, str]]:

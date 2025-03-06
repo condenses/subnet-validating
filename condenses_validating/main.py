@@ -159,53 +159,27 @@ class ValidatorCore:
 
     async def run(self) -> None:
         """Main validator loop"""
-        logger.info("Starting validator loop.")
-        await self.redis_manager.flush_db()
-        logger.info("Redis DB flushed")
-        asyncio.create_task(self.periodically_set_weights())
+        task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
 
-        tasks = []
+        async def worker():
+            while True:
+                task = await task_queue.get()
+                await task
+                task_queue.task_done()
+
+        # Start worker pool
+        workers = [
+            asyncio.create_task(worker())
+            for _ in range(CONFIG.validating.concurrent_forward)
+        ]
+
         while not self.should_exit:
             try:
-                logger.info(
-                    f"Starting {CONFIG.validating.concurrent_forward} staggered forward passes (one every 2 seconds)"
-                )
-                while len(tasks) > CONFIG.validating.concurrent_forward:
-                    # Drop finished tasks or timeout tasks
-                    tasks = [
-                        task
-                        for task in tasks
-                        if not task.done()
-                        or (
-                            task.done()
-                            and not task.exception()
-                            and task.result() is not None
-                        )
-                    ]
-                    logger.info(f"Waiting for {len(tasks)} tasks to finish")
-                    await asyncio.sleep(2)
-
-                # Create a new forward task with timeout
-                forward_task = asyncio.create_task(self.forward())
-                # Add timeout to the task
-                forward_timeout_task = asyncio.create_task(
-                    asyncio.wait_for(forward_task, timeout=360)
-                )
-                tasks.append(forward_timeout_task)
-                logger.success(f"Started {len(tasks)} tasks")
-
-                # Stagger the creation of forward tasks
-                await asyncio.sleep(2)
-            except asyncio.TimeoutError:
-                logger.warning(
-                    f"Forward task timed out after {CONFIG.validating.forward_timeout} seconds"
-                )
-            except Exception as e:
-                logger.error(f"Forward error: {e}")
-                traceback.print_exc()
-            except KeyboardInterrupt:
-                logger.success("Validator killed by keyboard interrupt.")
-                exit()
+                task = asyncio.create_task(self.forward())
+                await task_queue.put(task)
+                await asyncio.sleep(2)  # Throttle input rate
+            except asyncio.QueueFull:
+                await asyncio.sleep(1)
 
     async def periodically_set_weights(self):
         while not self.should_exit:
