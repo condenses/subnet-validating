@@ -23,6 +23,7 @@ authors = [
 ]
 dependencies = [
     "bittensor==9.0.0",
+    "datasketch>=1.6.5",
     "fastapi",
     "gunicorn>=23.0.0",
     "httpx>=0.28.1",
