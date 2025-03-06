@@ -194,7 +194,9 @@ class ScoringManager:
             )
 
         # Filter responses that need scoring
-        scored_counter = await self.redis_manager.get_scored_counter()
+        scored_counter = await self.redis_manager.get_scored_counter(
+            [r.uid for r in valid_responses]
+        )
         responses_to_score = [
             response
             for response in valid_responses

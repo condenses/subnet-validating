@@ -12,13 +12,15 @@ class RedisManager:
     async def flush_db(self):
         await self.redis.flushdb()
 
-    async def get_scored_counter(self) -> Dict[int, int]:
+    async def get_scored_counter(self, uids: List[int]) -> Dict[int, int]:
         """Get counter of scored UIDs"""
         scored_counter = {}
-        async for key in self.redis.scan_iter("scored_uid:*"):
-            uid = int(key.decode().split(":")[1])
+        # Only scan for the specific UIDs in the provided list
+        for uid in uids:
+            key = f"scored_uid:{uid}"
             count = await self.redis.get(key)
-            scored_counter[uid] = int(count)
+            if count is not None:
+                scored_counter[uid] = int(count)
         return scored_counter
 
     async def update_scoring_records(self, uids: List[int], config: Any) -> None:
