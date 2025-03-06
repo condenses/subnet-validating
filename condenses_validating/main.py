@@ -42,6 +42,9 @@ class ValidatorCore:
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
+        self.scoring_semaphore = asyncio.Semaphore(
+            CONFIG.validating.max_concurrent_scoring
+        )
         logger.success("ValidatorCore initialization complete")
         self.owner_server = httpx.AsyncClient(
             base_url=CONFIG.owner_server.base_url,
@@ -110,20 +113,33 @@ class ValidatorCore:
             forward_uuid, f"Received {len(responses)} responses"
         )
         try:
-            uids, scores, score_logs = await self.scoring_manager.get_scores(
-                responses=responses,
-                synthetic_synapse=synthetic_synapse,
-                uids=uids,
-                forward_uuid=forward_uuid,
+            logger.info(
+                f"[{forward_uuid}] Waiting for scoring semaphore (current available: {self.scoring_semaphore._value})"
             )
-            try:
-                await self.owner_server.post(
-                    "/api/v1/scoring_batch",
-                    json=score_logs,
-                    headers=get_headers(),
+            await self.redis_manager.add_log(
+                forward_uuid, f"Waiting for scoring semaphore"
+            )
+            async with self.scoring_semaphore:
+                logger.info(
+                    f"[{forward_uuid}] Acquired scoring semaphore, processing scores"
                 )
-            except Exception as e:
-                logger.error(f"Error in sending scoring batch to owner server: {e}")
+                await self.redis_manager.add_log(
+                    forward_uuid, f"Acquired scoring semaphore, processing scores"
+                )
+                uids, scores, score_logs = await self.scoring_manager.get_scores(
+                    responses=responses,
+                    synthetic_synapse=synthetic_synapse,
+                    uids=uids,
+                    forward_uuid=forward_uuid,
+                )
+                try:
+                    await self.owner_server.post(
+                        "/api/v1/scoring_batch",
+                        json=score_logs,
+                        headers=get_headers(),
+                    )
+                except Exception as e:
+                    logger.error(f"Error in sending scoring batch to owner server: {e}")
         except Exception as e:
             await self.redis_manager.add_log(forward_uuid, f"Error in scoring: {e}")
             return
