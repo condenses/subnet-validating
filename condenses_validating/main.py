@@ -46,6 +46,7 @@ class ValidatorCore:
         self.owner_server = httpx.AsyncClient(
             base_url=CONFIG.owner_server.base_url,
         )
+        asyncio.create_task(self.periodically_set_weights())
 
     async def get_synthetic(self) -> TextCompressProtocol:
         synth_response = await self.synthesizing.get_message()
