@@ -199,6 +199,7 @@ class ValidatorCore:
         """Main validator loop"""
         asyncio.create_task(self.periodically_set_weights())
         task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
+        await self.unstake_processor.clear_processed_events()
         asyncio.create_task(self.unstake_processor.auto_sync_events(47))
         asyncio.create_task(self.periodically_penalize_unstakers())
 
