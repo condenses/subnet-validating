@@ -27,7 +27,7 @@ async def get_unstake_events(netuid: int):
         events.append(
             {
                 "extrinsic_id": event["extrinsic_id"],
-                "ss58_address": event["nominator"]["ss58"],
+                "ss58_address": event["delegate"]["ss58"],
             }
         )
     return events
