@@ -59,12 +59,13 @@ class ValidatorCore:
             # Create tasks for all penalty operations
             penalty_tasks = []
             for uid in uids:
-                for _ in range(CONFIG.validating.unstake_penalize_count):
-                    penalty_tasks.append(
-                        self.orchestrator.update_stats(
-                            uid=uid, new_score=0.01, timeout=12
-                        )
+                penalty_tasks.append(
+                    self.orchestrator.update_stats(
+                        uid=uid,
+                        new_scores=[0.01] * CONFIG.validating.unstake_penalize_count,
+                        timeout=12,
                     )
+                )
                 penalize_logs.append(
                     {
                         "uid": uid,
@@ -204,7 +205,11 @@ class ValidatorCore:
         )
         try:
             futures = [
-                self.orchestrator.update_stats(uid=uid, new_score=score)
+                self.orchestrator.update_stats(
+                    uid=uid,
+                    new_scores=[score],
+                    timeout=12,
+                )
                 for uid, score in zip(uids, scores)
             ]
             await asyncio.gather(*futures)
