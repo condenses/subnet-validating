@@ -49,6 +49,7 @@ class ValidatingConfig(BaseModel):
     log_ttl: int = 300
     panel_width: int = 40
     scoring_rate: ScoringRateConfig = ScoringRateConfig()
+    unstake_penalize_count: int = 32
 
 
 class OwnerServerConfig(BaseModel):
@@ -64,6 +65,7 @@ class Settings(BaseSettings):
     sidecar_bittensor: SidecarBittensorConfig = SidecarBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
     owner_server: OwnerServerConfig = OwnerServerConfig()
+    taostats_api_key: str = ""
     wallet_name: str = "default"
     wallet_hotkey: str = "default"
     wallet_path: str = "~/.bittensor/wallets"

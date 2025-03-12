@@ -38,16 +38,13 @@ uv sync --prerelease=allow
 #### 1.1 Self-hosted LLM Inference
 
 *Requires A100 or H100 GPU*
-- Get access to the model from https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct then obtain a token from huggingface
+- Get access to the model from https://huggingface.co/mistralai/Mistral-Small-24B-Instruct-2501 then obtain a token from huggingface
 ```bash
-export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
+export MODEL_NAME="mistralai/Mistral-Small-24B-Instruct-2501"
 export HF_TOKEN=your_huggingface_token
-uv venv .vllm-venv
-. .vllm-venv/bin/activate
-uv pip install vllm
 export CUDA_VISIBLE_DEVICES=0 # Change to your GPU index
-pm2 start --name vllm "vllm serve $MODEL_NAME --enable-prefix-caching --enable-chunked-prefill"
-. .venv/bin/activate
+. scripts/vllm.sh
+update-env VLLM_CONFIG__MODEL_NAME $MODEL_NAME
 update-env VLLM_CONFIG__BASE_URL http://localhost:8000/v1 # Change to your VLLM server address, default is localhost:8000 if you serve vllm on the same machine
 ```
 
@@ -93,7 +90,10 @@ pm2 start python --name "sidecar-bittensor" -- -m uvicorn sidecar_bittensor.serv
 
 **Role**: Main process that orchestrates the validating process.
 
+**Get Taostats API Key from https://dash.taostats.io/api-keys**
+
 ```bash
+update-env TAOSTATS_API_KEY your_taostats_api_key
 update-env SYNTHESIZING__BASE_URL http://localhost:9100
 update-env NODE_MANAGING__BASE_URL http://localhost:9101
 update-env SCORING__BASE_URL http://localhost:9102

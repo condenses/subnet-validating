@@ -15,6 +15,7 @@ from datetime import datetime
 import httpx
 from .secured_headers import get_headers
 from .score_utils import ScoringManager
+from .unstake_events import UnstakeProcessor
 
 
 class ValidatorCore:
@@ -36,6 +37,7 @@ class ValidatorCore:
             name=CONFIG.wallet_name,
             hotkey=CONFIG.wallet_hotkey,
         )
+        self.unstake_processor = UnstakeProcessor(self.redis_client)
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
@@ -46,6 +48,63 @@ class ValidatorCore:
         self.owner_server = httpx.AsyncClient(
             base_url=CONFIG.owner_server.base_url,
         )
+
+    async def periodically_penalize_unstakers(self):
+        while not self.should_exit:
+            uids = await self.unstake_processor.get_buy_uids()
+            logger.info(f"Penalizing {len(uids)} uids")
+
+            penalize_logs = []
+
+            # Create tasks for all penalty operations
+            penalty_tasks = []
+            for uid in uids:
+                for _ in range(CONFIG.validating.unstake_penalize_count):
+                    penalty_tasks.append(
+                        self.orchestrator.update_stats(
+                            uid=uid, new_score=0.01, timeout=12
+                        )
+                    )
+                penalize_logs.append(
+                    {
+                        "uid": uid,
+                        "penalty_score": 0.01,
+                        "timestamp": datetime.now().isoformat(),
+                        "reason": "unstaking_penalty",
+                    }
+                )
+
+            # Execute all penalty tasks in parallel
+            if penalty_tasks:
+                results = await asyncio.gather(*penalty_tasks, return_exceptions=True)
+
+                # Log any errors
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        uid = penalize_logs[i]["uid"]
+                        logger.error(f"Error penalizing uid {uid}: {result}")
+                        await self.redis_manager.add_log(
+                            "penalize_unstaker",
+                            f"Error penalizing uid {uid}: {result}",
+                        )
+
+            if penalize_logs:
+                try:
+                    await self.owner_server.post(
+                        "/api/v1/unstake_penalties",
+                        json=penalize_logs,
+                        headers=get_headers(),
+                    )
+                    logger.info(
+                        f"Successfully posted {len(penalize_logs)} unstake penalty logs to owner server"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error posting unstake penalty logs to owner server: {e}"
+                    )
+
+            logger.success("Penalized unstakers")
+            await asyncio.sleep(60)
 
     async def get_synthetic(self) -> TextCompressProtocol:
         synth_response = await self.synthesizing.get_message()
@@ -161,6 +220,9 @@ class ValidatorCore:
         """Main validator loop"""
         asyncio.create_task(self.periodically_set_weights())
         task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
+        await self.unstake_processor.clear_processed_events()
+        asyncio.create_task(self.unstake_processor.auto_sync_events(47))
+        asyncio.create_task(self.periodically_penalize_unstakers())
 
         async def worker():
             while True:
@@ -217,3 +279,7 @@ def start_loop():
     validator = ValidatorCore()
     logger.info("Starting validator loop")
     asyncio.run(validator.run())
+
+
+if __name__ == "__main__":
+    start_loop()
