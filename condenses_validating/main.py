@@ -15,6 +15,7 @@ from datetime import datetime
 import httpx
 from .secured_headers import get_headers
 from .score_utils import ScoringManager
+from .unstake_events import UnstakeProcessor
 
 
 class ValidatorCore:
@@ -36,6 +37,7 @@ class ValidatorCore:
             name=CONFIG.wallet_name,
             hotkey=CONFIG.wallet_hotkey,
         )
+        self.unstake_processor = UnstakeProcessor(self.redis_client)
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
@@ -46,6 +48,12 @@ class ValidatorCore:
         self.owner_server = httpx.AsyncClient(
             base_url=CONFIG.owner_server.base_url,
         )
+
+    async def periodically_penalize_unstakers(self):
+        while not self.should_exit:
+            hotkeys = await self.unstake_processor.get_buy_hotkeys()
+            logger.info(f"Penalizing {len(hotkeys)} hotkeys")
+            await asyncio.sleep(600)
 
     async def get_synthetic(self) -> TextCompressProtocol:
         synth_response = await self.synthesizing.get_message()
@@ -161,6 +169,7 @@ class ValidatorCore:
         """Main validator loop"""
         asyncio.create_task(self.periodically_set_weights())
         task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
+        asyncio.create_task(self.unstake_processor.auto_sync_events(47))
 
         async def worker():
             while True:
@@ -181,6 +190,16 @@ class ValidatorCore:
                 await asyncio.sleep(2)  # Throttle input rate
             except asyncio.QueueFull:
                 await asyncio.sleep(1)
+
+    async def periodically_penalize_unstakers(self):
+        while not self.should_exit:
+            uids = await self.unstake_processor.get_buy_uids()
+            logger.info(f"Penalizing {len(uids)} uids")
+            for uid in uids:
+                for _ in range(CONFIG.validating.unstake_penalize_count):
+                    await self.orchestrator.update_stats(uid=uid, new_score=0.01)
+            logger.success("Penalized unstakers")
+            await asyncio.sleep(600)
 
     async def periodically_set_weights(self):
         while not self.should_exit:
@@ -217,3 +236,7 @@ def start_loop():
     validator = ValidatorCore()
     logger.info("Starting validator loop")
     asyncio.run(validator.run())
+
+
+if __name__ == "__main__":
+    start_loop()
