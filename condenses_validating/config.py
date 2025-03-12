@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     sidecar_bittensor: SidecarBittensorConfig = SidecarBittensorConfig()
     synthesizing: SynthesizingConfig = SynthesizingConfig()
     owner_server: OwnerServerConfig = OwnerServerConfig()
+    taostats_api_key: str = ""
     wallet_name: str = "default"
     wallet_hotkey: str = "default"
     wallet_path: str = "~/.bittensor/wallets"

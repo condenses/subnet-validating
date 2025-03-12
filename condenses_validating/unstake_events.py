@@ -3,9 +3,8 @@ from loguru import logger
 import os
 import asyncio
 from redis.asyncio import Redis
+from .config import CONFIG
 import time
-
-TAOSTATS_API_KEY = os.getenv("TAOSTATS_API_KEY")
 
 
 async def get_unstake_events(netuid: int):
@@ -18,7 +17,7 @@ async def get_unstake_events(netuid: int):
         "action": "undelegate",
         "timestamp_start": timestamp_start,
     }
-    headers = {"Authorization": TAOSTATS_API_KEY}
+    headers = {"Authorization": CONFIG.taostats_api_key}
     async with httpx.AsyncClient() as client:
         response = await client.get(url, params=params, headers=headers)
     data = response.json()["data"]
@@ -37,7 +36,7 @@ async def get_unstake_events(netuid: int):
 async def get_metagraph(netuid: int) -> dict[str, int]:
     url = f"https://api.taostats.io/api/metagraph/latest/v1"
     params = {"netuid": netuid, "limit": 256}
-    headers = {"Authorization": TAOSTATS_API_KEY}
+    headers = {"Authorization": CONFIG.taostats_api_key}
     async with httpx.AsyncClient() as client:
         response = await client.get(url, params=params, headers=headers)
     data = response.json()["data"]

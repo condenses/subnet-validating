@@ -93,7 +93,10 @@ pm2 start python --name "sidecar-bittensor" -- -m uvicorn sidecar_bittensor.serv
 
 **Role**: Main process that orchestrates the validating process.
 
+**Get Taostats API Key from https://dash.taostats.io/api-keys**
+
 ```bash
+update-env TAOSTATS_API_KEY your_taostats_api_key
 update-env SYNTHESIZING__BASE_URL http://localhost:9100
 update-env NODE_MANAGING__BASE_URL http://localhost:9101
 update-env SCORING__BASE_URL http://localhost:9102
