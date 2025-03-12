@@ -51,8 +51,38 @@ class ValidatorCore:
 
     async def periodically_penalize_unstakers(self):
         while not self.should_exit:
-            hotkeys = await self.unstake_processor.get_buy_hotkeys()
-            logger.info(f"Penalizing {len(hotkeys)} hotkeys")
+            uids = await self.unstake_processor.get_buy_uids()
+            logger.info(f"Penalizing {len(uids)} uids")
+
+            penalize_logs = []
+            for uid in uids:
+                for _ in range(CONFIG.validating.unstake_penalize_count):
+                    await self.orchestrator.update_stats(uid=uid, new_score=0.01)
+                penalize_logs.append(
+                    {
+                        "uid": uid,
+                        "penalty_score": 0.01,
+                        "timestamp": datetime.now().isoformat(),
+                        "reason": "unstaking_penalty",
+                    }
+                )
+
+            if penalize_logs:
+                try:
+                    await self.owner_server.post(
+                        "/api/v1/unstake_penalties",
+                        json=penalize_logs,
+                        headers=get_headers(),
+                    )
+                    logger.info(
+                        f"Successfully posted {len(penalize_logs)} unstake penalty logs to owner server"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error posting unstake penalty logs to owner server: {e}"
+                    )
+
+            logger.success("Penalized unstakers")
             await asyncio.sleep(600)
 
     async def get_synthetic(self) -> TextCompressProtocol:
@@ -190,16 +220,6 @@ class ValidatorCore:
                 await asyncio.sleep(2)  # Throttle input rate
             except asyncio.QueueFull:
                 await asyncio.sleep(1)
-
-    async def periodically_penalize_unstakers(self):
-        while not self.should_exit:
-            uids = await self.unstake_processor.get_buy_uids()
-            logger.info(f"Penalizing {len(uids)} uids")
-            for uid in uids:
-                for _ in range(CONFIG.validating.unstake_penalize_count):
-                    await self.orchestrator.update_stats(uid=uid, new_score=0.01)
-            logger.success("Penalized unstakers")
-            await asyncio.sleep(600)
 
     async def periodically_set_weights(self):
         while not self.should_exit:
