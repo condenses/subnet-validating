@@ -57,7 +57,16 @@ class ValidatorCore:
             penalize_logs = []
             for uid in uids:
                 for _ in range(CONFIG.validating.unstake_penalize_count):
-                    await self.orchestrator.update_stats(uid=uid, new_score=0.01)
+                    try:
+                        await self.orchestrator.update_stats(
+                            uid=uid, new_score=0.01, timeout=12
+                        )
+                    except Exception as e:
+                        logger.error(f"Error penalizing uid {uid}: {e}")
+                        await self.redis_manager.add_log(
+                            "penalize_unstaker",
+                            f"Error penalizing uid {uid}: {e}",
+                        )
                 penalize_logs.append(
                     {
                         "uid": uid,
