@@ -83,7 +83,7 @@ class ValidatorCore:
                     )
 
             logger.success("Penalized unstakers")
-            await asyncio.sleep(600)
+            await asyncio.sleep(60)
 
     async def get_synthetic(self) -> TextCompressProtocol:
         synth_response = await self.synthesizing.get_message()
@@ -200,6 +200,7 @@ class ValidatorCore:
         asyncio.create_task(self.periodically_set_weights())
         task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
         asyncio.create_task(self.unstake_processor.auto_sync_events(47))
+        asyncio.create_task(self.periodically_penalize_unstakers())
 
         async def worker():
             while True:
