@@ -65,14 +65,14 @@ class ValidatorCore:
                             uid=uid, new_score=0.01, timeout=12
                         )
                     )
-                    penalize_logs.append(
-                        {
-                            "uid": uid,
-                            "penalty_score": 0.01,
-                            "timestamp": datetime.now().isoformat(),
-                            "reason": "unstaking_penalty",
-                        }
-                    )
+                penalize_logs.append(
+                    {
+                        "uid": uid,
+                        "penalty_score": 0.01,
+                        "timestamp": datetime.now().isoformat(),
+                        "reason": "unstaking_penalty",
+                    }
+                )
 
             # Execute all penalty tasks in parallel
             if penalty_tasks:
