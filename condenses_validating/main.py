@@ -15,7 +15,7 @@ from datetime import datetime
 import httpx
 from .secured_headers import get_headers
 from .score_utils import ScoringManager
-from .unstake_events import UnstakeProcessor
+# from .unstake_events import UnstakeProcessor
 
 
 class ValidatorCore:
@@ -37,7 +37,7 @@ class ValidatorCore:
             name=CONFIG.wallet_name,
             hotkey=CONFIG.wallet_hotkey,
         )
-        self.unstake_processor = UnstakeProcessor(self.redis_client)
+        # self.unstake_processor = UnstakeProcessor(self.redis_client)
         logger.info(f"Wallet initialized: {self.wallet}")
         self.dendrite = bt.Dendrite(wallet=self.wallet)
         self.should_exit = False
@@ -225,9 +225,10 @@ class ValidatorCore:
         """Main validator loop"""
         asyncio.create_task(self.periodically_set_weights())
         task_queue = asyncio.Queue(maxsize=CONFIG.validating.concurrent_forward)
-        await self.unstake_processor.clear_processed_events()
-        asyncio.create_task(self.unstake_processor.auto_sync_events(47))
-        asyncio.create_task(self.periodically_penalize_unstakers())
+        # Remove liquidity force lock in
+        # await self.unstake_processor.clear_processed_events()
+        # asyncio.create_task(self.unstake_processor.auto_sync_events(47))
+        # asyncio.create_task(self.periodically_penalize_unstakers())
 
         async def worker():
             while True:
