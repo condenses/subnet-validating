@@ -16,10 +16,6 @@ echo -e "${YELLOW}Please enter your Hugging Face token:${NC}"
 read HF_TOKEN
 update-env HF_TOKEN $HF_TOKEN
 
-echo -e "${YELLOW}Please enter your Taostats API key (from https://dash.taostats.io/api-keys):${NC}"
-read TAOSTATS_API_KEY
-update-env TAOSTATS_API_KEY $TAOSTATS_API_KEY
-
 echo -e "${YELLOW}Please enter your wallet name (default is 'default'):${NC}"
 read WALLET_NAME
 WALLET_NAME=${WALLET_NAME:-default}
@@ -37,7 +33,7 @@ update-env WALLET_PATH $WALLET_PATH
 
 # Step 3: Set up LLM Inference
 echo -e "\n${GREEN}Step 3: Setting up LLM Inference${NC}"
-export MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
+export MODEL_NAME="mistralai/Mistral-Small-24B-Instruct-2501"
 update-env VLLM_CONFIG__MODEL_NAME $MODEL_NAME
 
 echo -e "${YELLOW}Do you want to set up self-hosted LLM inference? (requires A100 or H100 GPU) [y/N]:${NC}"
